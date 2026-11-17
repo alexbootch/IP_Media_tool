@@ -1,0 +1,35 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Converter: Git status",
+      "type": "process",
+      "command": "git",
+      "args": ["status", "--short", "--branch"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Converter: Git diff",
+      "type": "process",
+      "command": "git",
+      "args": ["--no-pager", "diff", "--no-ext-diff"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Converter: Git staged diff",
+      "type": "process",
+      "command": "git",
+      "args": ["--no-pager", "diff", "--cached", "--no-ext-diff"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
