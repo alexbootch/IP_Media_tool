@@ -11,6 +11,7 @@ GitHub: [alexbootch/IP_Media_tool](https://github.com/alexbootch/IP_Media_tool).
 - [Поточна інвентаризація хоста](docs/HOST_INVENTORY.uk.md)
 - [Чеклист розгортання](docs/DEPLOYMENT_CHECKLIST.uk.md)
 - [Інсталяція та оновлення через GitHub](docs/INSTALL_UPDATE.uk.md)
+- [Встановлення системних компонентів](docs/INSTALL_COMPONENTS.uk.md) — готовий код скрипта, виконання лише користувачем на Ubuntu.
 - [NDI discovery та groups](docs/NDI_DISCOVERY.uk.md)
 - [Архітектура та правила](docs/ARCHITECTURE.uk.md)
 - [Компоненти та залежності](docs/COMPONENTS.uk.md)

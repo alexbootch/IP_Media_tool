@@ -90,6 +90,8 @@
 
 ## Етап 7. Пакування і надійність
 
+- [x] Написати скрипт перевірки драйверів і встановлення відсутніх базових Ubuntu-компонентів: tools/install/install-components.sh. Локально не виконувався; серверне приймання й NDI packages залишаються відкритими.
+- [ ] Користувач перевіряє installer на Linux: --check, install, повторний запуск, missing driver, APT failure, NDI incomplete; без локальних тестів.
 - [ ] GitHub release pipeline: versioned build, validation, signed assets, dependency BOM, публікація stable та конкретні release manifests за [вимогами](INSTALL_UPDATE.uk.md).
 - [ ] converter-install: первинна й повторна інсталяція з GitHub Releases, stable/explicit version, обов'язкові runtime-залежності, driver checks, service account/systemd/bootstrap admin.
 - [ ] Versioned application/runtime bundle, dependency locks/BOM, compatibility manifest, systemd install/uninstall policy.
