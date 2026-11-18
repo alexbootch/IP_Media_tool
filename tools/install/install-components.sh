@@ -206,8 +206,42 @@ if command -v gst-inspect-1.0 >/dev/null; then
             fi
         done
     fi
-    if ! /usr/bin/python3 -c 'import gi; gi.require_version("Gst", "1.0"); gi.require_version("GstWebRTC", "1.0"); from gi.repository import Gst, GstWebRTC; print("OK Python GI / GStreamer", Gst.version_string())'; then
-        issue 'System Python cannot import the installed GStreamer/GstWebRTC GI bindings.'
+    log '=== System Python / GI / GStreamer / GstWebRTC ==='
+    if timeout 30s /usr/bin/python3 - > "$TEMP_DIR/python-gi.txt" 2>&1 <<'PYTHON'
+import sys
+import traceback
+
+stage = "import gi"
+try:
+    print("Python:", sys.executable, sys.version.split()[0], flush=True)
+    import gi
+
+    stage = "load Gst 1.0 typelib and Python overrides"
+    gi.require_version("Gst", "1.0")
+    from gi.repository import Gst
+
+    stage = "initialize GStreamer (no pipeline)"
+    Gst.init(None)
+    print("OK GStreamer:", Gst.version_string(), flush=True)
+
+    stage = "load GstWebRTC 1.0 typelib"
+    gi.require_version("GstWebRTC", "1.0")
+    from gi.repository import GstWebRTC
+
+    stage = "resolve GstWebRTC session description type"
+    GstWebRTC.WebRTCSessionDescription
+    print("OK Python GI / Gst / GstWebRTC", flush=True)
+except Exception:
+    print("FAILED stage:", stage, file=sys.stderr, flush=True)
+    traceback.print_exc()
+    sys.exit(1)
+PYTHON
+    then
+        cat "$TEMP_DIR/python-gi.txt"
+    else
+        issue 'System Python GI/GStreamer verification failed or timed out; detailed output follows.'
+        cat "$TEMP_DIR/python-gi.txt" >&2
+        log 'ACTION: inspect the failing stage above. Relevant packages: python3-gi, python3-gst-1.0, gir1.2-gstreamer-1.0, gir1.2-gst-plugins-bad-1.0. Do not replace system GI with a pip install.'
     fi
     NDI_READY=1
     for factory in ndisrc ndisrcdemux ndisinkcombiner ndisink; do
