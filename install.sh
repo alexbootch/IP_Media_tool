@@ -5,7 +5,7 @@ export LC_ALL=C
 umask 022
 REPOSITORY=${IP_MEDIA_TOOL_REPOSITORY:-alexbootch/IP_Media_tool}
 CHANNEL=main
-VERSION=
+REQUESTED_TAG=
 REVISION=
 BASE_ONLY=0
 RESTART_RUNNING=0
@@ -16,7 +16,7 @@ die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 while (($#)); do
     case "$1" in
         --channel) (($# >= 2)) || die '--channel requires main or stable.'; CHANNEL=$2; shift 2 ;;
-        --version) (($# >= 2)) || die '--version requires a tag.'; VERSION=$2; CHANNEL=stable; shift 2 ;;
+        --version) (($# >= 2)) || die '--version requires a tag.'; REQUESTED_TAG=$2; CHANNEL=stable; shift 2 ;;
         --revision) (($# >= 2)) || die '--revision requires a commit SHA.'; REVISION=$2; shift 2 ;;
         --base-only) BASE_ONLY=1; shift ;;
         --restart-running) RESTART_RUNNING=1; shift ;;
@@ -28,14 +28,18 @@ while (($#)); do
         *) die "Unknown argument: $1" ;;
     esac
 done
-if [[ -n "$VERSION" ]]; then CHANNEL=stable; fi
+if [[ -n "$REQUESTED_TAG" ]]; then CHANNEL=stable; fi
 [[ "$(uname -s)" == Linux ]] || die 'Run on the Linux server only.'
 ((EUID == 0)) || die 'Run with sudo bash install.sh.'
-source /etc/os-release
-[[ "${ID:-}" == ubuntu && "${VERSION_ID:-}" == 24.04 ]] || die 'Supported profile: Ubuntu 24.04 LTS.'
+# Keep OS variables (notably VERSION) out of the installer argument namespace.
+OS_PROFILE=$(
+    source /etc/os-release
+    printf '%s:%s' "${ID:-}" "${VERSION_ID:-}"
+)
+[[ "$OS_PROFILE" == ubuntu:24.04 ]] || die 'Supported profile: Ubuntu 24.04 LTS.'
 [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die 'Invalid public repository.'
 [[ "$CHANNEL" == main || "$CHANNEL" == stable ]] || die 'Channel must be main or stable.'
-if [[ -n "$VERSION" ]]; then [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid tag.'; fi
+if [[ -n "$REQUESTED_TAG" ]]; then [[ "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid release tag; expected vX.Y.Z.'; fi
 if [[ -n "$REVISION" ]]; then [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] || die 'Invalid commit SHA.'; fi
 exec 9>/run/lock/ip-media-tool-install.lock
 flock -n 9 || die 'Another installation is running.'
@@ -55,12 +59,12 @@ download() {
 if [[ -z "$REVISION" ]]; then
     REF=main
     if [[ "$CHANNEL" == stable ]]; then
-        if [[ -z "$VERSION" ]]; then
+        if [[ -z "$REQUESTED_TAG" ]]; then
             download "https://api.github.com/repos/$REPOSITORY/releases/latest" "$WORK_DIR/release.json"
-            VERSION=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag_name"])' "$WORK_DIR/release.json")
+            REQUESTED_TAG=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag_name"])' "$WORK_DIR/release.json")
         fi
-        [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid stable tag.'
-        REF=$VERSION
+        [[ "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid stable tag.'
+        REF=$REQUESTED_TAG
     fi
     download "https://api.github.com/repos/$REPOSITORY/commits/$REF" "$WORK_DIR/commit.json"
     REVISION=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha"])' "$WORK_DIR/commit.json")

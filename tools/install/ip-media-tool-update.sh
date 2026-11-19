@@ -4,7 +4,7 @@ set -Eeuo pipefail
 export LC_ALL=C
 REPOSITORY=${IP_MEDIA_TOOL_REPOSITORY:-alexbootch/IP_Media_tool}
 CHANNEL=main
-VERSION=
+REQUESTED_TAG=
 MODE=update
 BASE_ONLY=0
 WORK_DIR=
@@ -15,7 +15,7 @@ while (($#)); do
     case "$1" in
         --check) MODE=check; shift ;;
         --channel) (($# >= 2)) || die '--channel requires main or stable.'; CHANNEL=$2; shift 2 ;;
-        --version) (($# >= 2)) || die '--version requires a tag.'; VERSION=$2; CHANNEL=stable; shift 2 ;;
+        --version) (($# >= 2)) || die '--version requires a tag.'; REQUESTED_TAG=$2; CHANNEL=stable; shift 2 ;;
         --base-only) BASE_ONLY=1; shift ;;
         --help|-h)
             printf '%s\n' 'ip-media-tool-update [--check] [--channel main|stable] [--version vX.Y.Z] [--base-only]' \
@@ -24,13 +24,13 @@ while (($#)); do
         *) die "Unknown argument: $1" ;;
     esac
 done
-if [[ -n "$VERSION" ]]; then CHANNEL=stable; fi
+if [[ -n "$REQUESTED_TAG" ]]; then CHANNEL=stable; fi
 [[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die 'Invalid public repository.'
 [[ "$CHANNEL" == main || "$CHANNEL" == stable ]] || die 'Channel must be main or stable.'
-if [[ -n "$VERSION" ]]; then [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid tag.'; fi
+if [[ -n "$REQUESTED_TAG" ]]; then [[ "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid release tag; expected vX.Y.Z.'; fi
 if [[ "$MODE" == update ]] && ((EUID != 0)); then
     ARGS=(--channel "$CHANNEL")
-    if [[ -n "$VERSION" ]]; then ARGS+=(--version "$VERSION"); fi
+    if [[ -n "$REQUESTED_TAG" ]]; then ARGS+=(--version "$REQUESTED_TAG"); fi
     if ((BASE_ONLY)); then ARGS+=(--base-only); fi
     exec sudo -- /usr/local/sbin/ip-media-tool-update "${ARGS[@]}"
 fi
@@ -43,12 +43,12 @@ download() {
 }
 REF=main
 if [[ "$CHANNEL" == stable ]]; then
-    if [[ -z "$VERSION" ]]; then
+    if [[ -z "$REQUESTED_TAG" ]]; then
         download "https://api.github.com/repos/$REPOSITORY/releases/latest" "$WORK_DIR/release.json"
-        VERSION=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag_name"])' "$WORK_DIR/release.json")
+        REQUESTED_TAG=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag_name"])' "$WORK_DIR/release.json")
     fi
-    [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid stable release tag.'
-    REF=$VERSION
+    [[ "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid stable release tag.'
+    REF=$REQUESTED_TAG
 fi
 download "https://api.github.com/repos/$REPOSITORY/commits/$REF" "$WORK_DIR/commit.json"
 REVISION=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha"])' "$WORK_DIR/commit.json")
@@ -59,6 +59,6 @@ printf 'Installed: %s\nAvailable %s: %s\n' "$INSTALLED" "$CHANNEL" "$REVISION"
 if [[ "$MODE" == check ]]; then exit 0; fi
 download "https://raw.githubusercontent.com/$REPOSITORY/$REVISION/install.sh" "$WORK_DIR/install.sh"
 ARGS=(--channel "$CHANNEL" --revision "$REVISION" --restart-running)
-if [[ -n "$VERSION" ]]; then ARGS+=(--version "$VERSION"); fi
+if [[ -n "$REQUESTED_TAG" ]]; then ARGS+=(--version "$REQUESTED_TAG"); fi
 if ((BASE_ONLY)); then ARGS+=(--base-only); fi
 bash "$WORK_DIR/install.sh" "${ARGS[@]}"
