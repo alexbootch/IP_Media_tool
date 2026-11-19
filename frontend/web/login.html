@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вхід · IP Media Tool</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script type="module" src="/assets/login.js"></script>
+</head>
+<body class="login-page">
+  <main class="login-layout">
+    <section class="intro-panel" aria-label="IP Media Tool">
+      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">↗</span><span>IP MEDIA<span class="brand-light"> TOOL</span></span></a>
+      <div class="intro-content">
+        <span class="eyebrow">MEDIA CONTROL PLATFORM</span>
+        <h1>Ваші сигнали.<br>Ваш контроль.</h1>
+        <p>Єдиний простір для керування медіапотоками та доступом вашої команди.</p>
+        <div class="signal-diagram" aria-hidden="true"><span>IN</span><i></i><b>IP</b><i></i><span>OUT</span></div>
+        <div class="protocols"><span>SDI</span><span>NDI</span><span>SRT</span><span>WebRTC</span></div>
+      </div>
+      <p class="intro-footer">IP Media Tool <span>Керування на вашому сервері</span></p>
+    </section>
+    <section class="login-form-panel">
+      <div class="login-card">
+        <div class="section-symbol" aria-hidden="true">↳</div>
+        <span class="eyebrow">РАДІ БАЧИТИ ВАС</span>
+        <h2>Вхід до системи</h2>
+        <p class="muted">Увійдіть, щоб відкрити робочий простір.</p>
+        <div id="setup-notice" class="notice" hidden>Адміністратора ще не створено. Завершіть початкове налаштування на сервері.</div>
+        <form id="login-form">
+          <label for="username">Логін</label>
+          <input id="username" name="username" autocomplete="username" maxlength="64" placeholder="Ваш логін" required autofocus>
+          <label for="password">Пароль</label>
+          <div class="password-field"><input id="password" name="password" type="password" autocomplete="current-password" maxlength="128" placeholder="Введіть пароль" required><button id="toggle-password" type="button" class="password-toggle" aria-pressed="false">Показати</button></div>
+          <p id="login-error" class="form-error" role="alert" hidden></p>
+          <button id="login-submit" class="button primary full-width" type="submit">Увійти <span aria-hidden="true">→</span></button>
+        </form>
+        <p class="login-help">Немає доступу? Зверніться до адміністратора вашої системи.</p>
+      </div>
+      <p class="login-bottom">Доступ лише для авторизованих користувачів</p>
+    </section>
+  </main>
+</body>
+</html>

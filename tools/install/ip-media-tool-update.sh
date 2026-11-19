@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Installed as /usr/local/sbin/ip-media-tool-update; no Git checkout or credentials.
+# Public main-channel updater; the Windows developer controls push, the operator controls execution.
 set -Eeuo pipefail
 export LC_ALL=C
-REPOSITORY='@DISTRIBUTION_REPOSITORY@'
-MODE=update
+REPOSITORY=${IP_MEDIA_TOOL_REPOSITORY:-alexbootch/IP_Media_tool}
+CHANNEL=main
 VERSION=
+MODE=update
 BASE_ONLY=0
 WORK_DIR=
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -13,53 +14,51 @@ trap cleanup EXIT
 while (($#)); do
     case "$1" in
         --check) MODE=check; shift ;;
+        --channel) (($# >= 2)) || die '--channel requires main or stable.'; CHANNEL=$2; shift 2 ;;
+        --version) (($# >= 2)) || die '--version requires a tag.'; VERSION=$2; CHANNEL=stable; shift 2 ;;
         --base-only) BASE_ONLY=1; shift ;;
-        --version) (($# >= 2)) || die '--version requires a tag.'; VERSION=$2; shift 2 ;;
         --help|-h)
-            printf '%s\n' 'ip-media-tool-update [--check] [--version vX.Y.Z] [--base-only]' \
-                'Downloads a public release; no Git login. No Converter services or media pipelines are started.'
+            printf '%s\n' 'ip-media-tool-update [--check] [--channel main|stable] [--version vX.Y.Z] [--base-only]' \
+                'Default: current main commit. No Git login or release publication required.'
             exit 0 ;;
         *) die "Unknown argument: $1" ;;
     esac
 done
-[[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die 'Unconfigured updater template.'
-if [[ -n "$VERSION" ]]; then
-    [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid release tag.'
-fi
+if [[ -n "$VERSION" ]]; then CHANNEL=stable; fi
+[[ "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die 'Invalid public repository.'
+[[ "$CHANNEL" == main || "$CHANNEL" == stable ]] || die 'Channel must be main or stable.'
+if [[ -n "$VERSION" ]]; then [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid tag.'; fi
 if [[ "$MODE" == update ]] && ((EUID != 0)); then
-    # Re-enter the installed root-owned updater, not an arbitrary user-controlled path.
-    ARGS=()
+    ARGS=(--channel "$CHANNEL")
     if [[ -n "$VERSION" ]]; then ARGS+=(--version "$VERSION"); fi
     if ((BASE_ONLY)); then ARGS+=(--base-only); fi
     exec sudo -- /usr/local/sbin/ip-media-tool-update "${ARGS[@]}"
 fi
-command -v curl >/dev/null || die 'curl is unavailable; rerun the installation bootstrap.'
+command -v curl >/dev/null || die 'curl is missing. Rerun the public installer.'
+command -v /usr/bin/python3 >/dev/null || die 'System Python is missing. Rerun the public installer.'
 WORK_DIR=$(mktemp -d /tmp/ip-media-tool-update.XXXXXXXX)
-if [[ -n "$VERSION" ]]; then
-    URL="https://github.com/$REPOSITORY/releases/download/$VERSION/install.sh"
-else
-    URL="https://github.com/$REPOSITORY/releases/latest/download/install.sh"
-fi
-if ! curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
-    --tlsv1.2 --retry 3 --connect-timeout 15 --max-time 300 "$URL" -o "$WORK_DIR/install.sh"; then
-    die 'Cannot download the public release. Check connectivity, public visibility and publication of install.sh. No token is requested.'
-fi
-AVAILABLE=$(sed -n "s/^RELEASE_TAG='\([^']*\)'$/\1/p" "$WORK_DIR/install.sh")
-[[ "$AVAILABLE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Downloaded installer has no valid release tag.'
-if [[ -n "$VERSION" && "$AVAILABLE" != "$VERSION" ]]; then die 'Release tag mismatch.'; fi
-INSTALLED=none
-STATE=unknown
-if [[ -r /var/lib/converter/bootstrap-release ]]; then
-    { read -r INSTALLED; read -r STATE || true; } < /var/lib/converter/bootstrap-release
-fi
-printf 'Installed bootstrap: %s (last prerequisite status: %s)\nAvailable: %s\n' "$INSTALLED" "$STATE" "$AVAILABLE"
-if [[ "$MODE" == check ]]; then exit 0; fi
-if [[ -z "$VERSION" && "$INSTALLED" != none ]] && command -v dpkg >/dev/null; then
-    if dpkg --compare-versions "${AVAILABLE#v}" lt "${INSTALLED#v}"; then
-        die 'Latest release is older than installed. Select an explicit --version if this downgrade is intended.'
+download() {
+    curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' \
+        --tlsv1.2 --retry 3 --connect-timeout 15 --max-time 300 "$1" -o "$2"
+}
+REF=main
+if [[ "$CHANNEL" == stable ]]; then
+    if [[ -z "$VERSION" ]]; then
+        download "https://api.github.com/repos/$REPOSITORY/releases/latest" "$WORK_DIR/release.json"
+        VERSION=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tag_name"])' "$WORK_DIR/release.json")
     fi
+    [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || die 'Invalid stable release tag.'
+    REF=$VERSION
 fi
-ARGS=()
+download "https://api.github.com/repos/$REPOSITORY/commits/$REF" "$WORK_DIR/commit.json"
+REVISION=$(/usr/bin/python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha"])' "$WORK_DIR/commit.json")
+[[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] || die 'Invalid commit SHA returned by GitHub.'
+INSTALLED=none
+if [[ -r /var/lib/ip-media-tool/installed-revision ]]; then read -r INSTALLED < /var/lib/ip-media-tool/installed-revision; fi
+printf 'Installed: %s\nAvailable %s: %s\n' "$INSTALLED" "$CHANNEL" "$REVISION"
+if [[ "$MODE" == check ]]; then exit 0; fi
+download "https://raw.githubusercontent.com/$REPOSITORY/$REVISION/install.sh" "$WORK_DIR/install.sh"
+ARGS=(--channel "$CHANNEL" --revision "$REVISION" --restart-running)
+if [[ -n "$VERSION" ]]; then ARGS+=(--version "$VERSION"); fi
 if ((BASE_ONLY)); then ARGS+=(--base-only); fi
-# Keep this process and its EXIT cleanup alive while the pinned installer runs.
 bash "$WORK_DIR/install.sh" "${ARGS[@]}"

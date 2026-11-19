@@ -1,10 +1,10 @@
-name: Publish prerequisite installer
+name: Publish IP Media Tool release
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release tag, for example v0.1.0 (system prerequisites only)'
+        description: 'Optional stable tag after Linux acceptance, for example v0.2.0'
         required: true
         type: string
 
@@ -59,10 +59,11 @@ jobs:
             echo 'Tag already exists. Publish a new version instead.'; exit 1
           fi
           cat > release-notes.txt <<'NOTES'
-          System prerequisite bootstrap only. Installs Python/GStreamer distribution packages,
-          checks drivers and installs ip-media-tool-update. No Converter application, NDI package,
-          service startup or media validation is included. Installer has not been run by this workflow.
+          IP Media Tool web control: login, user administration and protected workspace shell.
+          Application source is included in the GitHub tag archive. Main updates do not require releases.
+          Installer and tests have not been run by this workflow. Initial service startup is manual.
+          NDI runtime packages and media nodes are not included yet.
           NOTES
           gh release create "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --title "System prerequisites $RELEASE_VERSION" \
+            --target "$GITHUB_SHA" --title "IP Media Tool $RELEASE_VERSION" \
             --notes-file release-notes.txt --latest release-files/*

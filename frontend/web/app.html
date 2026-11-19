@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Робочий простір · IP Media Tool</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body class="workspace-page">
+  <div class="app-layout">
+    <aside class="sidebar">
+      <a class="brand" href="/app"><span class="brand-mark" aria-hidden="true">↗</span><span>IP MEDIA<span class="brand-light"> TOOL</span></span></a>
+      <p class="nav-caption">КЕРУВАННЯ</p>
+      <nav aria-label="Основна навігація">
+        <button class="nav-item active" id="workspace-nav" type="button" aria-current="page"><span aria-hidden="true">▦</span>Робочий простір</button>
+        <button class="nav-item" id="users-nav" type="button" hidden><span aria-hidden="true">♙</span>Користувачі</button>
+      </nav>
+      <div class="sidebar-bottom"><span class="status-dot"></span>Контроль доступу<span class="sidebar-note">IP Media Tool</span></div>
+    </aside>
+    <div class="main-column">
+      <header class="topbar">
+        <div><span class="breadcrumb">IP Media Tool</span><span class="breadcrumb-divider">/</span><span id="breadcrumb-page">Робочий простір</span></div>
+        <div class="account-area"><span id="account-avatar" class="avatar small">…</span><div><strong id="account-name">Завантаження…</strong><span id="account-role" class="account-role"></span></div><button id="own-password-button" type="button" class="button text-button">Пароль</button><button id="logout-button" type="button" class="button subtle">Вийти</button></div>
+      </header>
+      <main class="main-content" id="main-content" aria-busy="true">
+        <section id="workspace-view">
+          <div class="page-heading"><div><span class="eyebrow">ВАША СИСТЕМА</span><h1>Робочий простір</h1><p class="muted">Керуйте медіамаршрутами в одному просторі.</p></div><span class="pill">Початкове налаштування</span></div>
+          <div class="workspace-canvas"><div class="empty-workspace"><div class="empty-icon" aria-hidden="true">▦</div><h2>Простір для ваших потоків</h2><p>Вхід і керування доступом уже доступні.<br>Медіамаршрути ще не налаштовані.</p><span class="muted small-text">Граф нод з’явиться на наступному етапі.</span></div></div>
+        </section>
+        <section id="users-view" hidden>
+          <div class="page-heading"><div><span class="eyebrow">АДМІНІСТРУВАННЯ</span><h1>Користувачі <span id="user-count" class="count-badge">0</span></h1><p class="muted">Облікові записи та права доступу до системи.</p></div><button id="add-user-button" type="button" class="button primary">＋ Додати користувача</button></div>
+          <div class="table-card"><div class="table-toolbar"><label class="search-label" for="user-search">Пошук</label><input id="user-search" type="search" placeholder="Ім’я або логін" maxlength="80"><button id="refresh-users" type="button" class="button subtle">Оновити список</button></div><div class="table-scroll"><table><thead><tr><th>Користувач</th><th>Роль</th><th>Статус</th><th>Останній вхід</th><th class="align-right">Дії</th></tr></thead><tbody id="user-rows"></tbody></table></div><p id="users-empty" class="table-empty" hidden>Користувачів не знайдено.</p><div class="table-footer">Ролі: адміністратор — користувачі й налаштування; оператор — майбутнє керування потоками; перегляд — читання стану.</div></div>
+        </section>
+      </main>
+      <footer class="app-footer">IP Media Tool<span>Доступ за ролями · Сесії зберігаються на сервері</span></footer>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="user-dialog"><form id="user-form"><div class="dialog-heading"><div><span class="eyebrow">ОБЛІКОВИЙ ЗАПИС</span><h2 id="user-dialog-title">Новий користувач</h2></div><button class="icon-button" type="button" data-close aria-label="Закрити">×</button></div><label for="user-name">Ім’я</label><input id="user-name" name="display_name" maxlength="80" required><label for="user-login">Логін</label><input id="user-login" name="username" minlength="3" maxlength="32" pattern="[a-z0-9][a-z0-9_.\-]{2,31}" autocomplete="off" required><label for="user-role">Роль</label><select id="user-role" name="role"><option value="viewer">Перегляд</option><option value="operator">Оператор</option><option value="admin">Адміністратор</option></select><div id="new-password-group"><label for="user-password">Початковий пароль</label><input id="user-password" name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password"><p class="field-help">Від 12 до 128 символів.</p></div><label class="checkbox-label" id="user-enabled-group"><input type="checkbox" id="user-enabled" name="enabled">Обліковий запис активний</label><p class="form-error" data-error role="alert" hidden></p><div class="dialog-actions"><button class="button subtle" type="button" data-close>Скасувати</button><button class="button primary" type="submit">Зберегти</button></div></form></dialog>
+  <dialog id="password-dialog"><form id="password-form"><div class="dialog-heading"><div><span class="eyebrow">БЕЗПЕКА</span><h2 id="password-title">Змінити пароль</h2></div><button class="icon-button" type="button" data-close aria-label="Закрити">×</button></div><p id="password-description" class="muted"></p><div id="current-password-group"><label for="current-password">Поточний пароль</label><input id="current-password" type="password" autocomplete="current-password" maxlength="128"></div><label for="new-password">Новий пароль</label><input id="new-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><label for="confirm-password">Повторіть новий пароль</label><input id="confirm-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><p class="field-help">Усі попередні сесії цього користувача буде завершено.</p><p class="form-error" data-error role="alert" hidden></p><div class="dialog-actions"><button class="button subtle" type="button" data-close>Скасувати</button><button class="button primary" type="submit">Змінити пароль</button></div></form></dialog>
+  <dialog id="delete-dialog"><form id="delete-form"><div class="dialog-heading"><h2>Видалити користувача?</h2><button class="icon-button" type="button" data-close aria-label="Закрити">×</button></div><p id="delete-description" class="muted"></p><p class="form-error" data-error role="alert" hidden></p><div class="dialog-actions"><button class="button subtle" type="button" data-close>Скасувати</button><button class="button danger" type="submit">Видалити</button></div></form></dialog>
+</body>
+</html>

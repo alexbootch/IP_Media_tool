@@ -32,6 +32,8 @@
 
 ## Етап 2. Каркас системи та керування
 
+Реалізація 2026-11-19: написано FastAPI web shell, login/session/roles, file-backed users і browser user management; installer створює systemd unit, ip-media-tool-admin та main-channel updater. Локально не запускалося, [серверне приймання](WEB_AUTH.uk.md) відкрите. Graph/runtime/mock workers цього етапу ще не реалізовані.
+
 - [ ] File config store: schema/revision validation, atomic writes, recovery, backup, конфіг пошкоджений/відсутній.
 - [ ] Відновлення графа лише з конфігів нод; unresolved connections, перевірка циклів, зміна координат, import/export.
 - [ ] node-sdk і plugin manifest: ports, config schema, worker entry point, UI entry point, capabilities requirements.

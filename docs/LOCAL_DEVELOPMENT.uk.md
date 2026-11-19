@@ -36,6 +36,8 @@
 
 ## GitHub та Linux
 
+Актуальна реалізація 2026-11-19: [WEB_AUTH.uk.md](WEB_AUTH.uk.md). Публічний main bootstrap встановлює web app, auth/users, admin CLI і systemd unit. Після першої інсталяції сервіс стартує лише за командою користувача; надалі його явний виклик ip-media-tool-update перезапускає вже активний web service для застосування нового коду. Main не потребує release після кожного push. Попередні припущення про обов'язковий build/release для кожного update не застосовуються до поточного frontend без build step.
+
 Уточнення 2026-11-18: на Linux не використовуються Git clone/pull, токени або SSH deploy keys для інсталяції. Основний шлях — [публічні release assets та ip-media-tool-update](PUBLIC_INSTALL.uk.md). Git залишається тільки на Windows для публікації розробником; публічний release workflow запускається вручну. Старі рекомендації щодо Git-доступу сервера не є вимогою нового workflow.
 
 ```text

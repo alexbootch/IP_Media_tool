@@ -21,6 +21,9 @@
 
 ## Обов'язкові компоненти інсталяції
 
+- [x] Написати web installer, systemd unit, admin CLI та main-channel updater; додати Ubuntu python3-fastapi/python3-uvicorn/python3-argon2. Початковий запуск ручний; фактичне серверне приймання ще не виконане.
+- [ ] Користувач створює першого admin, запускає сервіс і перевіряє [сценарії auth/user management](WEB_AUTH.uk.md).
+
 - [x] Написати public release bootstrap install.sh і updater ip-media-tool-update, без Git/credentials на Ubuntu. Код не виконувався локально; [публікація й серверне приймання](PUBLIC_INSTALL.uk.md) ще потрібні.
 - [ ] Власник забезпечує public distribution, виконує commit/push і вручну публікує перший installer release. Без публічних assets URL без авторизації не працюватиме.
 

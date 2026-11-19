@@ -1,0 +1,26 @@
+[Unit]
+Description=IP Media Tool web control
+After=network.target
+
+[Service]
+Type=simple
+User=ip-media-tool
+Group=ip-media-tool
+WorkingDirectory=/opt/ip-media-tool/current
+Environment=IP_MEDIA_TOOL_BIND=0.0.0.0
+Environment=IP_MEDIA_TOOL_PORT=8080
+Environment=IP_MEDIA_TOOL_SECURITY_DIR=/var/lib/ip-media-tool/security
+Environment=IP_MEDIA_TOOL_COOKIE_SECURE=false
+EnvironmentFile=-/etc/ip-media-tool/environment
+ExecStart=/usr/bin/python3 -m uvicorn converter.control.app:app --app-dir /opt/ip-media-tool/current/src --host ${IP_MEDIA_TOOL_BIND} --port ${IP_MEDIA_TOOL_PORT} --workers 1 --no-access-log --proxy-headers --forwarded-allow-ips 127.0.0.1 --limit-concurrency 32
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ip-media-tool/security
+
+[Install]
+WantedBy=multi-user.target
