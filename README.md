@@ -2,7 +2,7 @@
 
 GitHub: [alexbootch/IP_Media_tool](https://github.com/alexbootch/IP_Media_tool).
 
-Основний шлях доставки: [публічний інсталятор та application-update](docs/PUBLIC_INSTALL.uk.md). На Ubuntu не потрібні Git clone/pull, GitHub tokens або SSH keys. Посилання завантаження почне працювати після ручної публікації першого public release.
+Основний шлях доставки: [публічний інсталятор та ip-media-tool-update](docs/PUBLIC_INSTALL.uk.md). На Ubuntu не потрібні Git clone/pull, GitHub tokens або SSH keys. Посилання завантаження почне працювати після ручної публікації першого public release.
 
 Кросконвертор SDI, NDI, SRT та WebRTC для одного фізичного Linux-сервера. OMT відкладено на майбутнє; власний OMT-плагін не розробляємо. Медіаобробка — GStreamer; керування — браузерний граф із входом користувачів та журналом дій.
 

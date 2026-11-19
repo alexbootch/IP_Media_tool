@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installed as /usr/local/sbin/application-update; no Git checkout or credentials.
+# Installed as /usr/local/sbin/ip-media-tool-update; no Git checkout or credentials.
 set -Eeuo pipefail
 export LC_ALL=C
 REPOSITORY='@DISTRIBUTION_REPOSITORY@'
@@ -16,7 +16,7 @@ while (($#)); do
         --base-only) BASE_ONLY=1; shift ;;
         --version) (($# >= 2)) || die '--version requires a tag.'; VERSION=$2; shift 2 ;;
         --help|-h)
-            printf '%s\n' 'application-update [--check] [--version vX.Y.Z] [--base-only]' \
+            printf '%s\n' 'ip-media-tool-update [--check] [--version vX.Y.Z] [--base-only]' \
                 'Downloads a public release; no Git login. No Converter services or media pipelines are started.'
             exit 0 ;;
         *) die "Unknown argument: $1" ;;
@@ -31,10 +31,10 @@ if [[ "$MODE" == update ]] && ((EUID != 0)); then
     ARGS=()
     if [[ -n "$VERSION" ]]; then ARGS+=(--version "$VERSION"); fi
     if ((BASE_ONLY)); then ARGS+=(--base-only); fi
-    exec sudo -- /usr/local/sbin/application-update "${ARGS[@]}"
+    exec sudo -- /usr/local/sbin/ip-media-tool-update "${ARGS[@]}"
 fi
 command -v curl >/dev/null || die 'curl is unavailable; rerun the installation bootstrap.'
-WORK_DIR=$(mktemp -d /tmp/application-update.XXXXXXXX)
+WORK_DIR=$(mktemp -d /tmp/ip-media-tool-update.XXXXXXXX)
 if [[ -n "$VERSION" ]]; then
     URL="https://github.com/$REPOSITORY/releases/download/$VERSION/install.sh"
 else

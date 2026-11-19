@@ -1,6 +1,6 @@
 # Інсталяція та оновлення через GitHub
 
-Актуальний спосіб доставки від 2026-11-18: [публічний install.sh та application-update](PUBLIC_INSTALL.uk.md). Код bootstrap/updater і ручного release workflow підготовлено, але реліз ще не опублікований. На сервері використовується public release download без Git login. Нижче описані також майбутні application-level вимоги: підписані bundles, конфіг-міграції, health checks і rollback; вони ще не реалізовані в bootstrap системних залежностей.
+Актуальний спосіб доставки від 2026-11-18: [публічний install.sh та ip-media-tool-update](PUBLIC_INSTALL.uk.md). Код bootstrap/updater і ручного release workflow підготовлено, але реліз ще не опублікований. На сервері використовується public release download без Git login. Нижче описані також майбутні application-level вимоги: підписані bundles, конфіг-міграції, health checks і rollback; вони ще не реалізовані в bootstrap системних залежностей.
 
 Оновлено: 2026-11-18. Репозиторій GitHub: [alexbootch/IP_Media_tool](https://github.com/alexbootch/IP_Media_tool), підключений локально як origin. Код installer/updater для системних залежностей та ручного release workflow підготовлений. Публікація й перевірка користувачем на Linux ще потрібні.
 
@@ -21,7 +21,7 @@ Release assets: готовий application/runtime package для підтрим
 Інтерфейс після публікації першого public release:
 
 ```text
-curl -fL https://github.com/alexbootch/IP_Media_tool/releases/latest/download/install.sh -o /tmp/ip-media-install.sh && sudo bash /tmp/ip-media-install.sh
+curl -fL https://github.com/alexbootch/IP_Media_tool/releases/latest/download/install.sh -o /tmp/ip-media-tool-install.sh && sudo bash /tmp/ip-media-tool-install.sh
 ```
 
 1. Перевірити Linux profile/architecture, права, диск, блокування паралельної інсталяції та поточний стан. CPU/RAM конкретного тестового сервера не є шаблоном вимог до машини.
@@ -37,9 +37,9 @@ curl -fL https://github.com/alexbootch/IP_Media_tool/releases/latest/download/in
 Запланований інтерфейс:
 
 ```text
-application-update --check
-application-update
-application-update --version v0.1.0
+ip-media-tool-update --check
+ip-media-tool-update
+ip-media-tool-update --version v0.1.0
 ```
 
 Виклик без version використовує останній опублікований release. Поточний updater готує системні компоненти; --rollback і --no-start для нього не реалізовані, застосунок і його сервіси не встановлюються. Нижче — майбутній application-level порядок. Автоматичний режим означає виконання процедури командою без ручного копіювання файлів; фонові оновлення за розкладом не входять до вимог.

@@ -91,6 +91,6 @@ Reserve/release ресурсів централізовані: SDI endpoint excl
 
 Вхід, сесії, права viewer/operator/admin, protected user files з password hashes, обмежені файлові права, audit trail та rotation входять у перший керований вертикальний зріз. Секрети протоколів зберігаються окремо від експортованих конфігів нод; конфіг містить secret reference. Web API не приймає довільні shell commands чи неперевірені launch strings.
 
-converter-update завантажує конкретний stable release asset із GitHub Releases, перевіряє довіру підпису й digest, compatibility manifest і доступний диск; створює backup конфігів, готує нову версію поруч із чинною, проводить preflight, контрольовано зупиняє потрібні workloads, перемикає release та перевіряє здоров'я. Rollback повертає попередній runtime і сумісний snapshot конфігів. Migration failure, interrupted update та power loss — обов'язкові сценарії.
+ip-media-tool-update завантажує конкретний stable release asset із GitHub Releases, перевіряє довіру підпису й digest, compatibility manifest і доступний диск; створює backup конфігів, готує нову версію поруч із чинною, проводить preflight, контрольовано зупиняє потрібні workloads, перемикає release та перевіряє здоров'я. Rollback повертає попередній runtime і сумісний snapshot конфігів. Migration failure, interrupted update та power loss — обов'язкові сценарії.
 
 Оновлення драйверів, kernel і базового OS stack — окреме maintenance завдання. Безперервність сигналу під час update не є гарантією першого релізу.

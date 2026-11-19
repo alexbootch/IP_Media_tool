@@ -21,11 +21,11 @@
 
 ## Обов'язкові компоненти інсталяції
 
-- [x] Написати public release bootstrap install.sh і updater application-update, без Git/credentials на Ubuntu. Код не виконувався локально; [публікація й серверне приймання](PUBLIC_INSTALL.uk.md) ще потрібні.
+- [x] Написати public release bootstrap install.sh і updater ip-media-tool-update, без Git/credentials на Ubuntu. Код не виконувався локально; [публікація й серверне приймання](PUBLIC_INSTALL.uk.md) ще потрібні.
 - [ ] Власник забезпечує public distribution, виконує commit/push і вручну публікує перший installer release. Без публічних assets URL без авторизації не працюватиме.
 
 - [ ] Первинна інсталяція з GitHub Releases: stable або конкретна версія, перевірений installer/package/manifest; [вимоги до installer/updater](INSTALL_UPDATE.uk.md).
-- [ ] Встановити converter-update: перевірка нового stable, оновлення, встановлення конкретної версії та rollback зі збереженням конфігів.
+- [ ] Встановити ip-media-tool-update: перевірка нового stable, оновлення, встановлення конкретної версії та rollback зі збереженням конфігів.
 
 - [ ] Python потрібної версії, virtual environment та зафіксовані Python-залежності Converter.
 - [ ] GStreamer runtime/tools, PyGObject/GI, typelibs і потрібні медіаплагіни відповідно до release manifest.

@@ -42,10 +42,10 @@ jobs:
           sed -e "s|@DISTRIBUTION_REPOSITORY@|$GITHUB_REPOSITORY|g" \
               -e "s|@RELEASE_TAG@|$RELEASE_VERSION|g" install.sh > release-files/install.sh
           sed "s|@DISTRIBUTION_REPOSITORY@|$GITHUB_REPOSITORY|g" \
-              tools/install/application-update.sh > release-files/application-update.sh
+              tools/install/ip-media-tool-update.sh > release-files/ip-media-tool-update.sh
           cp tools/install/install-components.sh packaging/ubuntu-24.04.packages release-files/
           cd release-files
-          sha256sum install.sh application-update.sh install-components.sh ubuntu-24.04.packages > SHA256SUMS
+          sha256sum install.sh ip-media-tool-update.sh install-components.sh ubuntu-24.04.packages > SHA256SUMS
 
       - name: Publish manually requested release
         env:
@@ -60,7 +60,7 @@ jobs:
           fi
           cat > release-notes.txt <<'NOTES'
           System prerequisite bootstrap only. Installs Python/GStreamer distribution packages,
-          checks drivers and installs application-update. No Converter application, NDI package,
+          checks drivers and installs ip-media-tool-update. No Converter application, NDI package,
           service startup or media validation is included. Installer has not been run by this workflow.
           NOTES
           gh release create "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \

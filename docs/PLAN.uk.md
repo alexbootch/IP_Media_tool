@@ -90,14 +90,14 @@
 
 ## Етап 7. Пакування і надійність
 
-- [x] Написати public release bootstrap install.sh, application-update і workflow_dispatch для ручної публікації системних компонентів. Це не повний application installer; див. docs/PUBLIC_INSTALL.uk.md.
-- [ ] Забезпечити публічне розповсюдження та вручну опублікувати перший release. На Ubuntu — один URL для install, далі application-update; Git, PAT і deploy keys не потрібні.
+- [x] Написати public release bootstrap install.sh, ip-media-tool-update і workflow_dispatch для ручної публікації системних компонентів. Це не повний application installer; див. docs/PUBLIC_INSTALL.uk.md.
+- [ ] Забезпечити публічне розповсюдження та вручну опублікувати перший release. На Ubuntu — один URL для install, далі ip-media-tool-update; Git, PAT і deploy keys не потрібні.
 - [x] Написати скрипт перевірки драйверів і встановлення відсутніх базових Ubuntu-компонентів: tools/install/install-components.sh. Локально не виконувався; серверне приймання й NDI packages залишаються відкритими.
 - [ ] Користувач перевіряє installer на Linux: --check, install, повторний запуск, missing driver, APT failure, NDI incomplete; без локальних тестів.
 - [ ] GitHub release pipeline: versioned build, validation, signed assets, dependency BOM, публікація stable та конкретні release manifests за [вимогами](INSTALL_UPDATE.uk.md).
 - [ ] converter-install: первинна й повторна інсталяція з GitHub Releases, stable/explicit version, обов'язкові runtime-залежності, driver checks, service account/systemd/bootstrap admin.
 - [ ] Versioned application/runtime bundle, dependency locks/BOM, compatibility manifest, systemd install/uninstall policy.
-- [ ] converter-update: GitHub stable release, signature/digest checks, prepare/preflight, backup, controlled switch, health check і rollback.
+- [ ] ip-media-tool-update: GitHub stable release, signature/digest checks, prepare/preflight, backup, controlled switch, health check і rollback.
 - [ ] Перевірити update failure, config migration rollback, disk full, interruption/power loss та offline installed runtime.
 - [ ] Fault injection: worker crash/hang, device removal, discovery loss, network interruption, API restart, memory exhaustion.
 - [ ] Узгоджений soak test (початковий кандидат 72 години), кількість маршрутів/формати та бюджети CPU/GPU/RAM/latency/drift.
