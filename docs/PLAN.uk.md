@@ -90,6 +90,8 @@
 
 ## Етап 7. Пакування і надійність
 
+- [x] Написати public release bootstrap install.sh, application-update і workflow_dispatch для ручної публікації системних компонентів. Це не повний application installer; див. docs/PUBLIC_INSTALL.uk.md.
+- [ ] Забезпечити публічне розповсюдження та вручну опублікувати перший release. На Ubuntu — один URL для install, далі application-update; Git, PAT і deploy keys не потрібні.
 - [x] Написати скрипт перевірки драйверів і встановлення відсутніх базових Ubuntu-компонентів: tools/install/install-components.sh. Локально не виконувався; серверне приймання й NDI packages залишаються відкритими.
 - [ ] Користувач перевіряє installer на Linux: --check, install, повторний запуск, missing driver, APT failure, NDI incomplete; без локальних тестів.
 - [ ] GitHub release pipeline: versioned build, validation, signed assets, dependency BOM, публікація stable та конкретні release manifests за [вимогами](INSTALL_UPDATE.uk.md).

@@ -1,0 +1,68 @@
+name: Publish prerequisite installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag, for example v0.1.0 (system prerequisites only)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-prerequisite-installer
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Assemble release files without running the installer
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          REPOSITORY_IS_PRIVATE: ${{ github.event.repository.private }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$REPOSITORY_IS_PRIVATE" == true ]]; then
+            echo 'Anonymous installation requires public release files. Run this workflow in a public repository.'
+            exit 1
+          fi
+          [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]] || {
+            echo 'Invalid version tag'; exit 1;
+          }
+          mkdir release-files
+          sed -e "s|@DISTRIBUTION_REPOSITORY@|$GITHUB_REPOSITORY|g" \
+              -e "s|@RELEASE_TAG@|$RELEASE_VERSION|g" install.sh > release-files/install.sh
+          sed "s|@DISTRIBUTION_REPOSITORY@|$GITHUB_REPOSITORY|g" \
+              tools/install/application-update.sh > release-files/application-update.sh
+          cp tools/install/install-components.sh packaging/ubuntu-24.04.packages release-files/
+          cd release-files
+          sha256sum install.sh application-update.sh install-components.sh ubuntu-24.04.packages > SHA256SUMS
+
+      - name: Publish manually requested release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Existing tags/releases are never replaced; choose a new version.
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_VERSION" >/dev/null 2>&1; then
+            echo 'Tag already exists. Publish a new version instead.'; exit 1
+          fi
+          cat > release-notes.txt <<'NOTES'
+          System prerequisite bootstrap only. Installs Python/GStreamer distribution packages,
+          checks drivers and installs application-update. No Converter application, NDI package,
+          service startup or media validation is included. Installer has not been run by this workflow.
+          NOTES
+          gh release create "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "System prerequisites $RELEASE_VERSION" \
+            --notes-file release-notes.txt --latest release-files/*

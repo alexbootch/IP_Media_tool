@@ -4,6 +4,8 @@
 
 ## Запуск користувачем на сервері
 
+Основний спосіб змінено: [одна публічна команда інсталяції, далі application-update](PUBLIC_INSTALL.uk.md). Clone/pull нижче — старий спосіб роботи з checkout, лише для ручної діагностики; він більше не потрібний користувачу для інсталяції. Публічний installer сам завантажує скрипт і список пакетів із конкретного релізу.
+
 Спочатку користувач виконує commit/push нових файлів із Windows у GitHub. До публікації tools/install/install-components.sh і packaging/ubuntu-24.04.packages команди нижче не зможуть запустити інсталяцію. Один лише раніше опублікований репозиторій не містить нових локальних файлів.
 
 Джерело: [репозиторій](https://github.com/alexbootch/IP_Media_tool). Після commit/push: [скрипт](https://github.com/alexbootch/IP_Media_tool/blob/main/tools/install/install-components.sh), [список пакетів](https://github.com/alexbootch/IP_Media_tool/blob/main/packaging/ubuntu-24.04.packages). Це поки код гілки main, не підписаний stable release installer.

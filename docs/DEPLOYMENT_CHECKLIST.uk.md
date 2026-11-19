@@ -21,6 +21,9 @@
 
 ## Обов'язкові компоненти інсталяції
 
+- [x] Написати public release bootstrap install.sh і updater application-update, без Git/credentials на Ubuntu. Код не виконувався локально; [публікація й серверне приймання](PUBLIC_INSTALL.uk.md) ще потрібні.
+- [ ] Власник забезпечує public distribution, виконує commit/push і вручну публікує перший installer release. Без публічних assets URL без авторизації не працюватиме.
+
 - [ ] Первинна інсталяція з GitHub Releases: stable або конкретна версія, перевірений installer/package/manifest; [вимоги до installer/updater](INSTALL_UPDATE.uk.md).
 - [ ] Встановити converter-update: перевірка нового stable, оновлення, встановлення конкретної версії та rollback зі збереженням конфігів.
 

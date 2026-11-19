@@ -36,6 +36,8 @@
 
 ## GitHub та Linux
 
+Уточнення 2026-11-18: на Linux не використовуються Git clone/pull, токени або SSH deploy keys для інсталяції. Основний шлях — [публічні release assets та application-update](PUBLIC_INSTALL.uk.md). Git залишається тільки на Windows для публікації розробником; публічний release workflow запускається вручну. Старі рекомендації щодо Git-доступу сервера не є вимогою нового workflow.
+
 ```text
 Windows / VS Code: код -> review -> commit -> push
                               |

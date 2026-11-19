@@ -1,6 +1,8 @@
 # Інсталяція та оновлення через GitHub
 
-Оновлено: 2026-11-17. Репозиторій GitHub: [alexbootch/IP_Media_tool](https://github.com/alexbootch/IP_Media_tool), підключений локально як origin. Installer, updater та release pipeline ще не створені; доступ і наявність remote releases не перевірені. Наведені команди описують запланований інтерфейс, зараз вони не виконуються.
+Актуальний спосіб доставки від 2026-11-18: [публічний install.sh та application-update](PUBLIC_INSTALL.uk.md). Код bootstrap/updater і ручного release workflow підготовлено, але реліз ще не опублікований. На сервері використовується public release download без Git login. Нижче описані також майбутні application-level вимоги: підписані bundles, конфіг-міграції, health checks і rollback; вони ще не реалізовані в bootstrap системних залежностей.
+
+Оновлено: 2026-11-18. Репозиторій GitHub: [alexbootch/IP_Media_tool](https://github.com/alexbootch/IP_Media_tool), підключений локально як origin. Код installer/updater для системних залежностей та ручного release workflow підготовлений. Публікація й перевірка користувачем на Linux ще потрібні.
 
 Режим роботи: код редагується на Windows без локальних тестів чи builds. Commit/push, запуск release build і публікація версії виконуються за дією користувача. На Linux користувач сам викликає installer/updater, обирає запуск сервісів і вручну запускає перевірки та маршрути. Пряме відвантаження на сервер із редактора, SSH-deploy pipeline та фонова інсталяція відсутні. Деталі — у [локальному workflow](LOCAL_DEVELOPMENT.uk.md).
 
@@ -16,12 +18,10 @@ Release assets: готовий application/runtime package для підтрим
 
 Перший підготовлений крок — [скрипт системних компонентів](INSTALL_COMPONENTS.uk.md). Він встановлює базові Ubuntu-залежності та діагностує драйвери/NDI; повний release installer і автоматичне встановлення NDI-пакетів ще не готові.
 
-Запланований інтерфейс після отримання й перевірки installer:
+Інтерфейс після публікації першого public release:
 
 ```text
-sudo ./converter-install --channel stable
-sudo ./converter-install --version <version>
-sudo ./converter-install --version <version> --no-start
+curl -fL https://github.com/alexbootch/IP_Media_tool/releases/latest/download/install.sh -o /tmp/ip-media-install.sh && sudo bash /tmp/ip-media-install.sh
 ```
 
 1. Перевірити Linux profile/architecture, права, диск, блокування паралельної інсталяції та поточний стан. CPU/RAM конкретного тестового сервера не є шаблоном вимог до машини.
@@ -37,14 +37,12 @@ sudo ./converter-install --version <version> --no-start
 Запланований інтерфейс:
 
 ```text
-converter-update --check
-sudo converter-update
-sudo converter-update --version <version>
-sudo converter-update --version <version> --no-start
-sudo converter-update --rollback
+application-update --check
+application-update
+application-update --version v0.1.0
 ```
 
-Виклик без version використовує latest stable. Автоматичний режим означає виконання процедури командою без ручного копіювання файлів; фонові оновлення за розкладом не входять до вимог.
+Виклик без version використовує останній опублікований release. Поточний updater готує системні компоненти; --rollback і --no-start для нього не реалізовані, застосунок і його сервіси не встановлюються. Нижче — майбутній application-level порядок. Автоматичний режим означає виконання процедури командою без ручного копіювання файлів; фонові оновлення за розкладом не входять до вимог.
 
 Порядок: lock -> resolve release -> download/verify -> compatibility/preflight -> prepare version directory -> backup configs/secrets із захищеними правами -> контрольована зупинка потрібних services/workers -> config migration -> atomic current switch -> restart core services за явним вибором користувача -> bounded health checks -> commit installed state. Відновлення медіамаршрутів після maintenance виконується окремою дією користувача. При --no-start зберігається стан pending validation; runtime health checks і завершення приймання виконуються після ручного запуску, без неправдивої позначки успішного runtime validation.
 
