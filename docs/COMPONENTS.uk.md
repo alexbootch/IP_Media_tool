@@ -31,7 +31,7 @@ Factories нижче — кандидати для gst-inspect на цільов
 | WebRTC | webrtcbin або перевірений wrapper, codec/payloader support, signaling, ICE/STUN/TURN; input ingestion і output viewing окремі сценарії |
 | NDI | gst-plugin-ndi: ndisrc, ndisrcdemux, ndisinkcombiner, ndisink і discovery provider; потрібна динамічно завантажувана NDI runtime-бібліотека. Повний SDK на сервері не є базовою вимогою; перевірити groups/discovery та ABI |
 | OMT | Відкладено. Не входить у поточну інсталяцію; власний plugin не розробляємо. Майбутня інтеграція лише з придатним готовим plugin |
-| GPU | NVIDIA driver + nvcodec factories та native NVENC probe; NVDEC й інші vendors окремими задачами |
+| GPU | NVIDIA driver + nvcodec factories; device-bound caps/properties і CUDA UUID/PCI mapping у disposable Python probe. Native C++ helper не є поточною runtime-залежністю; raw hardware-only flags, NVDEC й інші vendors — окремі задачі |
 
 Не вважати NDI HX і всі його кодеки включеними автоматично: підтримувані NDI режими зафіксувати після SDK/plugin тесту. Для WebRTC визначити standalone signaling чи WHIP/WHEP після перевірки потрібних клієнтів. Для SRT перший кандидат payload — MPEG-TS, інші payloads не обіцяються автоматично.
 

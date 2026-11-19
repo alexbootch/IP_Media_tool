@@ -17,6 +17,8 @@
 
 ## Обмеження перенесення
 
+Стан переносу 2026-11-19: у Converter написано hardware/encoder_capabilities.py і hardware/gpu/probe.py та panel у шапці. Використано background/cache/per-adapter підхід із перевіркою UUID/PCI/CUDA identity; GI перенесений у disposable subprocess. Native helper не є runtime-залежністю: effective flags/limits беруться зі структурованих GStreamer caps/properties. Hardware-only NVENC flags без GStreamer exposure не оголошуються як перевірені. Див. GPU_CAPABILITIES.uk.md; локально код не виконувався.
+
 - Не переносити SQLite graph store, старі NATS contracts, MXL/NMOS/Kubernetes як обов'язкові залежності нового ядра.
 - Не переносити весь controller/main.py як основу: виділити потрібні механізми зі стабільними межами.
 - Не називати NVIDIA encoder probe універсальним GPU-detector: decode caps і AMD/Intel providers потребують окремої реалізації.

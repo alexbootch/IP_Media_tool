@@ -20,7 +20,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/ip-media-tool/security
+ReadWritePaths=/var/lib/ip-media-tool/security /var/lib/ip-media-tool/hardware
 
 [Install]
 WantedBy=multi-user.target

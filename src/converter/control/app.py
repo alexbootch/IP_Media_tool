@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from converter.security.store import AccessError, IdentityStore
+from converter.hardware.encoder_capabilities import EncoderCapabilityManager
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -19,12 +20,19 @@ WEB = ROOT / "frontend" / "web"
 COOKIE = "ip_media_tool_session"
 STORE = IdentityStore(os.environ.get("IP_MEDIA_TOOL_SECURITY_DIR", "/var/lib/ip-media-tool/security"))
 SECURE_COOKIE = os.environ.get("IP_MEDIA_TOOL_COOKIE_SECURE", "false").lower() == "true"
+ENCODERS = EncoderCapabilityManager(os.environ.get(
+    "IP_MEDIA_TOOL_GPU_CACHE", "/var/lib/ip-media-tool/hardware/encoder-capabilities.json"
+))
 
 
 @asynccontextmanager
 async def lifespan(application):
     STORE.initialize()
-    yield
+    ENCODERS.initialize()
+    try:
+        yield
+    finally:
+        ENCODERS.close()
 
 
 app = FastAPI(title="IP Media Tool", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
@@ -121,6 +129,21 @@ def login(body: Login, request: Request):
 @app.get("/api/session")
 def session(current=Depends(identity)):
     return {"user": current[0], "csrf": current[1]}
+
+
+@app.get("/api/hardware/encoder-capabilities")
+def encoder_capabilities(current=Depends(identity)):
+    return ENCODERS.snapshot()
+
+
+@app.post("/api/hardware/encoder-capabilities/refresh", status_code=202)
+def refresh_encoder_capabilities(current=Depends(identity)):
+    if current[0]["role"] not in {"admin", "operator"}:
+        raise HTTPException(403, "Повторна перевірка доступна адміністратору та оператору.")
+    started = ENCODERS.start_query(force=True)
+    if started:
+        STORE.record("hardware.encoder_refresh", current[0]["username"])
+    return {"started": started, **ENCODERS.snapshot()}
 
 
 @app.post("/api/auth/logout")

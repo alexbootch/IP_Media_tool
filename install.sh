@@ -105,6 +105,11 @@ fi
 [[ "$(id -u ip-media-tool)" != 0 ]] || die 'Service user must not be root.'
 install -d -m 0755 /opt/ip-media-tool/releases /var/lib/ip-media-tool /etc/ip-media-tool
 install -d -m 0700 -o ip-media-tool -g ip-media-tool /var/lib/ip-media-tool/security
+install -d -m 0700 -o ip-media-tool -g ip-media-tool /var/lib/ip-media-tool/hardware
+# Supplementary device access without creating absent groups or changing driver/device permissions.
+for device_group in video render; do
+    if getent group "$device_group" >/dev/null; then usermod -a -G "$device_group" ip-media-tool; fi
+done
 if [[ ! -e /etc/ip-media-tool/environment ]]; then
     cat > /etc/ip-media-tool/environment <<'ENVIRONMENT'
 IP_MEDIA_TOOL_BIND=0.0.0.0

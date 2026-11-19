@@ -21,6 +21,16 @@
     <div class="main-column">
       <header class="topbar">
         <div><span class="breadcrumb">IP Media Tool</span><span class="breadcrumb-divider">/</span><span id="breadcrumb-page">Робочий простір</span></div>
+        <details id="gpu-panel" class="gpu-panel">
+          <summary class="gpu-summary"><span class="gpu-status" id="gpu-status" aria-hidden="true"></span><span class="gpu-summary-copy"><strong id="gpu-name">GPU · перевірка</strong><span id="gpu-summary-codecs">Можливості апаратного кодування</span></span><span aria-hidden="true">⌄</span></summary>
+          <section class="gpu-popover" aria-label="Можливості відеокарти">
+            <div class="gpu-panel-heading"><div><span class="eyebrow">АПАРАТНЕ КОДУВАННЯ</span><h2>Можливості GPU</h2></div><button id="gpu-refresh" type="button" class="button subtle" disabled>Перевірити знову</button></div>
+            <p id="gpu-query-state" class="muted small-text" role="status" aria-live="polite">Отримання параметрів…</p>
+            <p id="gpu-error" class="form-error" role="alert" hidden></p>
+            <div id="gpu-adapters"></div>
+            <p class="gpu-footnote">Можливості, відкриті поточним GStreamer для конкретної GPU. Це не вимірювання продуктивності чи вільних сесій. NVDEC тут ще не перевіряється.</p>
+          </section>
+        </details>
         <div class="account-area"><span id="account-avatar" class="avatar small">…</span><div><strong id="account-name">Завантаження…</strong><span id="account-role" class="account-role"></span></div><button id="own-password-button" type="button" class="button text-button">Пароль</button><button id="logout-button" type="button" class="button subtle">Вийти</button></div>
       </header>
       <main class="main-content" id="main-content" aria-busy="true">
