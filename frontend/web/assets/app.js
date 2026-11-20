@@ -1,5 +1,6 @@
 import { api, showError, submitForm } from "/assets/api.js";
 import { initializeGpuPanel } from "/assets/gpu.js";
+import { initializeDeckLinkPanel } from "/assets/decklink.js";
 
 const $ = (selector) => document.querySelector(selector);
 const roles = { admin: "Адміністратор", operator: "Оператор", viewer: "Перегляд" };
@@ -179,6 +180,7 @@ async function initialize() {
     session = await api("/api/session");
     account();
     initializeGpuPanel({ request, role: session.user.role });
+    initializeDeckLinkPanel({ request, role: session.user.role });
     $("#main-content").setAttribute("aria-busy", "false");
   } catch (failure) { toast(failure.message, true); }
 }

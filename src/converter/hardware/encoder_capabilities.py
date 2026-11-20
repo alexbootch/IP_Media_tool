@@ -23,6 +23,11 @@ MAX_OUTPUT_BYTES = 2_000_000
 
 
 class EncoderCapabilityManager:
+    probe_module = "converter.hardware.gpu.probe"
+    probe_label = "GPU"
+    items_key = "adapters"
+    max_items = 64
+
     def __init__(self, cache_path):
         self.cache_path = Path(cache_path)
         self._lock = Lock()
@@ -48,7 +53,7 @@ class EncoderCapabilityManager:
             if self._stop.is_set() or self._state["query_running"]:
                 return False
             self._state.update(query_running=True, last_error=None)
-            self._thread = Thread(target=self._run, args=(force,), name="encoder-capability-query", daemon=True)
+            self._thread = Thread(target=self._run, args=(force,), name=f"{self.probe_label.lower()}-capability-query", daemon=True)
             self._thread.start()
         return True
 
@@ -70,7 +75,7 @@ class EncoderCapabilityManager:
             pass
 
     def _probe(self, inventory=False):
-        arguments = [sys.executable, "-m", "converter.hardware.gpu.probe"]
+        arguments = [sys.executable, "-m", self.probe_module]
         if inventory:
             arguments.append("--inventory")
         environment = os.environ.copy()
@@ -88,21 +93,21 @@ class EncoderCapabilityManager:
                 except subprocess.TimeoutExpired:
                     self._kill(process)
                     process.wait()
-                    raise RuntimeError("GPU capability probe timed out; no media pipeline was started.") from None
+                    raise RuntimeError(f"{self.probe_label} capability probe timed out; no media pipeline was started.") from None
                 stderr.seek(0)
                 details = stderr.read(2000).decode("utf-8", errors="replace").strip()
                 if process.returncode:
-                    raise RuntimeError("GPU probe failed: " + (details or f"exit {process.returncode}"))
+                    raise RuntimeError(f"{self.probe_label} probe failed: " + (details or f"exit {process.returncode}"))
                 if stdout.tell() > MAX_OUTPUT_BYTES:
-                    raise RuntimeError("GPU probe output exceeds the supported size.")
+                    raise RuntimeError(f"{self.probe_label} probe output exceeds the supported size.")
                 stdout.seek(0)
                 payload = json.load(stdout)
-                if payload.get("schema_version") != 1 or not isinstance(payload.get("adapters"), list):
-                    raise RuntimeError("GPU probe returned unsupported data.")
-                if len(payload["adapters"]) > 64 or not isinstance(payload.get("fingerprint"), str):
-                    raise RuntimeError("GPU probe returned invalid inventory.")
+                if payload.get("schema_version") != 1 or not isinstance(payload.get(self.items_key), list):
+                    raise RuntimeError(f"{self.probe_label} probe returned unsupported data.")
+                if len(payload[self.items_key]) > self.max_items or not isinstance(payload.get("fingerprint"), str):
+                    raise RuntimeError(f"{self.probe_label} probe returned invalid inventory.")
                 if details:
-                    LOGGER.debug("GPU probe diagnostics: %s", details)
+                    LOGGER.debug("%s probe diagnostics: %s", self.probe_label, details)
                 return payload
             finally:
                 with self._lock:

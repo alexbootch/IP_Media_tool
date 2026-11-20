@@ -17,6 +17,8 @@
 
 ## Обмеження перенесення
 
+Стан переносу DeckLink 2026-11-20: адаптовано підхід decklink.py і decklink_scan_process.py у hardware/decklink/probe.py та hardware/decklink_capabilities.py. Опитується лише DeckLink provider в окремому процесі; є API, header panel, кеш попереднього результату й роздільні списки режимів. Кілька однакових моделей не об'єднуються за назвою, невідомий serial не замінюється вигаданою ідентичністю плати. Статичний каталог режимів не використовується як доказ підтримки. Див. DECKLINK_CAPABILITIES.uk.md; локально код не виконувався.
+
 Стан переносу 2026-11-19: у Converter написано hardware/encoder_capabilities.py і hardware/gpu/probe.py та panel у шапці. Використано background/cache/per-adapter підхід із перевіркою UUID/PCI/CUDA identity; GI перенесений у disposable subprocess. Native helper не є runtime-залежністю: effective flags/limits беруться зі структурованих GStreamer caps/properties. Hardware-only NVENC flags без GStreamer exposure не оголошуються як перевірені. Див. GPU_CAPABILITIES.uk.md; локально код не виконувався.
 
 - Не переносити SQLite graph store, старі NATS contracts, MXL/NMOS/Kubernetes як обов'язкові залежності нового ядра.

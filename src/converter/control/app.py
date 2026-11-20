@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from converter.security.store import AccessError, IdentityStore
 from converter.hardware.encoder_capabilities import EncoderCapabilityManager
+from converter.hardware.decklink_capabilities import DeckLinkCapabilityManager
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -23,16 +24,21 @@ SECURE_COOKIE = os.environ.get("IP_MEDIA_TOOL_COOKIE_SECURE", "false").lower() =
 ENCODERS = EncoderCapabilityManager(os.environ.get(
     "IP_MEDIA_TOOL_GPU_CACHE", "/var/lib/ip-media-tool/hardware/encoder-capabilities.json"
 ))
+DECKLINK = DeckLinkCapabilityManager(os.environ.get(
+    "IP_MEDIA_TOOL_DECKLINK_CACHE", "/var/lib/ip-media-tool/hardware/decklink-capabilities.json"
+))
 
 
 @asynccontextmanager
 async def lifespan(application):
     STORE.initialize()
     ENCODERS.initialize()
+    DECKLINK.initialize()
     try:
         yield
     finally:
         ENCODERS.close()
+        DECKLINK.close()
 
 
 app = FastAPI(title="IP Media Tool", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
@@ -144,6 +150,21 @@ def refresh_encoder_capabilities(current=Depends(identity)):
     if started:
         STORE.record("hardware.encoder_refresh", current[0]["username"])
     return {"started": started, **ENCODERS.snapshot()}
+
+
+@app.get("/api/hardware/decklink-capabilities")
+def decklink_capabilities(current=Depends(identity)):
+    return DECKLINK.snapshot()
+
+
+@app.post("/api/hardware/decklink-capabilities/refresh", status_code=202)
+def refresh_decklink_capabilities(current=Depends(identity)):
+    if current[0]["role"] not in {"admin", "operator"}:
+        raise HTTPException(403, "Повторна перевірка доступна адміністратору та оператору.")
+    started = DECKLINK.start_query(force=True)
+    if started:
+        STORE.record("hardware.decklink_refresh", current[0]["username"])
+    return {"started": started, **DECKLINK.snapshot()}
 
 
 @app.post("/api/auth/logout")

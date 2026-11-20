@@ -60,7 +60,9 @@
 
 ## Етап 4. Hardware і перший зовнішній тракт
 
-GPU-частина 2026-11-19: написано background manager, disposable PCI/CUDA/GStreamer probe, versioned cache і header panel за підходом StreamMachine encoder_capabilities. Параметри effective per-device NVENC беруться зі встановленого GStreamer; hardware-only flags без native provider залишаються unknown. Локально не запускалося, [серверне приймання](GPU_CAPABILITIES.uk.md) відкрите. DeckLink scanner і media routes цього етапу ще не реалізовані.
+GPU-частина 2026-11-19: написано background manager, disposable PCI/CUDA/GStreamer probe, versioned cache і header panel за підходом StreamMachine encoder_capabilities. Параметри effective per-device NVENC беруться зі встановленого GStreamer; hardware-only flags без native provider залишаються unknown. Локально не запускалося, [серверне приймання](GPU_CAPABILITIES.uk.md) відкрите.
+
+DeckLink-частина 2026-11-20: написано disposable provider scan, startup/manual background manager із кешем попереднього результату, API та панель у шапці. Кілька плат розрізняються за ID/serial, режими входу/виходу читаються окремо з device caps. Непідтверджене групування плат і фізичне BNC mapping не припускаються. [Серверне приймання](DECKLINK_CAPABILITIES.uk.md) відкрите; локально не запускалося. Media routes ще не реалізовані.
 
 - [ ] Перенести й адаптувати DeckLink subprocess scanner та NVIDIA/NVENC capability helpers за reuse audit.
 - [ ] Додати stable identity, capability provenance, cache invalidation і діагностику unavailable/unknown/stale.

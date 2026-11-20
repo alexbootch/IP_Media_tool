@@ -1,0 +1,49 @@
+# DeckLink: плати, логічні порти та режими
+
+Реалізація від 2026-11-20 адаптує підхід `C:/StreamMachine/hardware/decklink.py` і `decklink_scan_process.py`: сканування в окремому disposable subprocess, JSON snapshot, роздільні режими входу й виходу. Локально код не запускався; приймання виконує користувач на Linux.
+
+## Запуск і кеш
+
+- Один фоновий scan при старті web service та ручний scan кнопкою «Перевірити знову». Відкриття браузера не запускає hardware scan. Постійного моніторингу немає.
+- Для DeckLink при старті завжди виконується свіже опитування: зовнішня зміна profile/duplex може змінити набір логічних портів і режимів без зміни версії драйвера. PCI fingerprint не доводить, що конфігурація залишилася попередньою.
+- Кеш `/var/lib/ip-media-tool/hardware/decklink-capabilities.json` атомарний. Поки триває перевірка, він може відображатися як попередні дані зі статусом stale. При помилці попередній результат зберігається з поясненням; він не оголошується актуальним. Шлях можна перевизначити через `IP_MEDIA_TOOL_DECKLINK_CACHE`.
+- Використано спільний із GPU механізм subprocess timeout (60 секунд), обмеження JSON (2 MB), single-flight та shutdown cleanup. GI і DeckLink driver initialization не виконуються у web process. Кожний scan має новий процес і тимчасовий GStreamer registry.
+- Викликається лише `decklinkdeviceprovider.get_devices()`. Медіапайплайни не створюються, профіль/duplex/connection не встановлюються, capture/playout не запускаються. Драйвер при discovery може відкривати службові інтерфейси; сумісність із активними маршрутами потребує серверного приймання.
+
+## Ідентифікація кількох плат
+
+`device-number` береться з властивостей provider, а не призначається за порядком відсортованого списку. Вхід і вихід об'єднуються за парою persistent ID та глобального device-number. Однакові назви моделей не є ключем.
+
+Коли provider надає серійний номер, порти групуються за ним. Коли серійного номера немає або він порожній/нульовий, порти залишаються окремими: UI прямо повідомляє, що фізична плата не згрупована. Число плат із serial не є загальним числом фізичних плат. PCI-пристрої Blackmagic показуються окремо, без непідтвердженого зіставлення PCI-функцій і логічних портів.
+
+Persistent ID передається як рядок, щоб не втрачати точність 64-bit integer у JavaScript. Відсутній або повторний ID явно позначається. Індекс `device-number` придатний для поточного сканування; майбутні конфіги нод мають повторно перевіряти стабільний ID, а не покладатися лише на індекс. `port_id` поточного inventory не є обіцянкою стабільного фізичного BNC mapping після зміни профілю.
+
+## Можливості порту
+
+Для входу й виходу зчитуються реальні `Gst.Device.get_caps()`, а не загальні pad templates або статичний перелік усіх `GstDecklinkModes`. Зберігаються роздільні списки режимів: ширина, висота, точний fps numerator/denominator, interlace-mode, pixel-aspect-ratio та field-order/format, коли provider їх надає. Не підставляються невідомі field-order чи pixel format. Raw caps доступні в панелі.
+
+Для interleaved UI показує звичне позначення з частотою полів (`1080i50`) і поряд точний frame rate (`25/1 кадр/с`). Режими з різним PAR не зливаються. Нерозібрані або відсутні режими позначаються як partial, а не підміняються каталогом усіх можливих режимів плагіна.
+
+Також показуються ознака автовизначення формату входу, повідомлена максимальна кількість аудіоканалів, версії завантаженого/встановленого драйвера та Desktop Video package, версія GStreamer/plugin.
+
+Це інвентар логічних портів. Він не визначає зайнятість іншим процесом, наявність сигналу, поточний SDI mode або фізичну нумерацію гнізд. Підтримка входу та виходу не доводить можливості одночасного використання обох напрямків. Перевірка режимів для конкретного SDI connection, link configuration, pixel format та route reservation залишається завданням запуску медіаноди.
+
+## API й інтерфейс
+
+- `GET /api/hardware/decklink-capabilities` — snapshot для автентифікованого користувача.
+- `POST /api/hardware/decklink-capabilities/refresh` — admin/operator, стандартні перевірки session/Origin/CSRF, HTTP 202, поле `started` повідомляє, чи розпочато новий scan. Повторний запит під час scan не створює другий процес. Дія записується в аудит `hardware.decklink_refresh`.
+- Панель DeckLink у шапці показує число логічних портів, напрямки, групи плат і детальні режими. UI опитує snapshot лише до завершення поточної перевірки; це не періодичний hardware scan.
+
+Поточний installer уже створює hardware cache directory з власником сервісу. Додатковий SDK, compiler або native helper для цього scan не потрібні; потрібні встановлений Desktop Video driver, GStreamer DeckLink plugin і Python GI/Gst bindings. Device permissions не послаблюються сканером.
+
+## Ручне серверне приймання
+
+Після commit/push користувач виконує `ip-media-tool-update`, відкриває сторінку та розгортає DeckLink-панель. Перевірити:
+
+1. Всі очікувані порти кожної плати присутні, однакові моделі не змішані. Device-number і serial/ID відповідають конфігурації Desktop Video.
+2. Режими входу й виходу відповідають можливостям карти; дробові частоти, interlaced частота полів та PAR показані коректно.
+3. Viewer читає результат, admin/operator можуть виконати один повторний scan; вхід і користувачі продовжують працювати.
+4. Після зміни profile/duplex зовнішнім засобом ручний scan оновлює порти; сам scan конфігурацію не змінює.
+5. Помилка драйвера/плагіна показує помилку, а не успішний порожній список; timeout не завершує web service. Для зайнятого порту результат не сприймається як підтвердження вільного ресурсу.
+
+Офіційні джерела: [GstDeviceProvider.get_devices](https://gstreamer.freedesktop.org/documentation/gstreamer/gstdeviceprovider.html), [GStreamer 1.24 DeckLink implementation](https://github.com/GStreamer/gstreamer/blob/1.24/subprojects/gst-plugins-bad/sys/decklink/gstdecklink.cpp), [DeckLink duplex і нумерація](https://gstreamer.freedesktop.org/documentation/decklink/decklinkvideosrc.html).

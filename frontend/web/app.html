@@ -21,6 +21,16 @@
     <div class="main-column">
       <header class="topbar">
         <div><span class="breadcrumb">IP Media Tool</span><span class="breadcrumb-divider">/</span><span id="breadcrumb-page">Робочий простір</span></div>
+        <details id="decklink-panel" class="gpu-panel decklink-panel">
+          <summary class="gpu-summary"><span class="gpu-status" id="decklink-status" aria-hidden="true"></span><span class="gpu-summary-copy"><strong id="decklink-name">DeckLink · перевірка</strong><span id="decklink-summary">Порти та підтримувані режими</span></span><span aria-hidden="true">⌄</span></summary>
+          <section class="gpu-popover" aria-label="Плати та порти DeckLink">
+            <div class="gpu-panel-heading"><div><span class="eyebrow">SDI · DECKLINK</span><h2>Плати та порти</h2></div><button id="decklink-refresh" type="button" class="button subtle" disabled>Перевірити знову</button></div>
+            <p id="decklink-query-state" class="muted small-text" role="status" aria-live="polite">Отримання параметрів…</p>
+            <p id="decklink-error" class="form-error" role="alert" hidden></p>
+            <div id="decklink-devices"></div>
+            <p class="gpu-footnote">Логічні порти й режими, які надає драйвер через GStreamer. Наявність порту не означає, що він вільний. Вхід/вихід не гарантує одночасний duplex. Фізичне SDI-гніздо залежить від профілю плати; сканер його не змінює.</p>
+          </section>
+        </details>
         <details id="gpu-panel" class="gpu-panel">
           <summary class="gpu-summary"><span class="gpu-status" id="gpu-status" aria-hidden="true"></span><span class="gpu-summary-copy"><strong id="gpu-name">GPU · перевірка</strong><span id="gpu-summary-codecs">Можливості апаратного кодування</span></span><span aria-hidden="true">⌄</span></summary>
           <section class="gpu-popover" aria-label="Можливості відеокарти">

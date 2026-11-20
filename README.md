@@ -11,6 +11,7 @@ GitHub: [alexbootch/IP_Media_tool](https://github.com/alexbootch/IP_Media_tool).
 - [План реалізації](docs/PLAN.uk.md)
 - [Вебінтерфейс, перший запуск і користувачі](docs/WEB_AUTH.uk.md)
 - [GPU capabilities у шапці](docs/GPU_CAPABILITIES.uk.md)
+- [DeckLink: плати, порти та режими у шапці](docs/DECKLINK_CAPABILITIES.uk.md)
 - [Локальна розробка та ручне розгортання](docs/LOCAL_DEVELOPMENT.uk.md)
 - [Поточна інвентаризація хоста](docs/HOST_INVENTORY.uk.md)
 - [Чеклист розгортання](docs/DEPLOYMENT_CHECKLIST.uk.md)
