@@ -18,7 +18,7 @@ import tempfile
 import uuid
 
 
-VENDORS = {"0x10de": "NVIDIA", "0x8086": "Intel", "0x1002": "AMD", "0x1a03": "ASPEED"}
+NVIDIA_VENDOR_ID = "0x10de"
 CODECS = {"video/x-h264": "h264", "video/x-h265": "hevc", "video/x-av1": "av1"}
 DEEP_FORMATS = {
     "P010_10LE", "P010_10BE", "P012_LE", "P016_LE", "P210_10LE", "P216_LE",
@@ -80,7 +80,9 @@ def inventory():
             if not (device / "class").read_text().strip().startswith("0x03"):
                 continue
             vendor_id = (device / "vendor").read_text().strip()
-            vendor = VENDORS.get(vendor_id, vendor_id)
+            if vendor_id != NVIDIA_VENDOR_ID:
+                continue
+            vendor = "NVIDIA"
             bus = pci_id(device.name)
             driver = (device / "driver").resolve().name if (device / "driver").exists() else None
             item = {
@@ -88,13 +90,11 @@ def inventory():
                 "display_name": names.get(bus, f"{vendor} GPU {bus}"), "driver_version": None,
                 "kernel_driver": driver, "memory_mib": None, "uuid": None,
                 "nvidia_index": None, "cuda_device_id": None,
-                "backend": "nvenc" if vendor == "NVIDIA" else None,
-                "query_status": "pending" if vendor == "NVIDIA" else "not_implemented",
-                "message": None if vendor == "NVIDIA" else "Перевірка апаратних енкодерів цього виробника ще не реалізована.",
+                "backend": "nvenc", "query_status": "pending", "message": None,
                 "codecs": [],
             }
             item.update(nvidia.pop(bus, {}))
-            if vendor == "NVIDIA" and item["uuid"] is None:
+            if item["uuid"] is None:
                 item["query_status"] = "unavailable"
                 item["message"] = "nvidia-smi не надав ідентифікатор GPU. " + (smi_error or "Перевірте драйвер і доступ сервісу.")
             adapters.append(item)

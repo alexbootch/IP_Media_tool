@@ -81,7 +81,7 @@ export function initializeGpuPanel({ request, role }) {
     const adapters = snapshot.adapters ?? [];
     const primary = adapters.find((adapter) => adapter.backend === "nvenc") ?? adapters[0];
     const supported = [...new Set(adapters.flatMap((adapter) => (adapter.codecs ?? []).map((codec) => codec.codec)))];
-    name.textContent = primary ? `${primary.display_name}${adapters.length > 1 ? ` +${adapters.length - 1}` : ""}` : snapshot.initialized ? "GPU не виявлено" : "GPU · перевірка";
+    name.textContent = primary ? `${primary.display_name}${adapters.length > 1 ? ` +${adapters.length - 1}` : ""}` : snapshot.initialized ? "NVIDIA GPU не виявлено" : "GPU · перевірка";
     summary.textContent = snapshot.query_running ? "Опитування можливостей…" : snapshot.stale ? "Попередні дані · потрібна перевірка" : supported.length ? supported.map((key) => CODECS[key] ?? key).join(" · ") : "Апаратні енкодери не підтверджені";
     const state = snapshot.query_running ? "querying" : snapshot.last_error || snapshot.stale ? "failed" : adapters.some((adapter) => adapter.query_status === "complete") ? "complete" : "partial";
     indicator.className = `gpu-status ${state}`;
@@ -90,7 +90,7 @@ export function initializeGpuPanel({ request, role }) {
     error.textContent = snapshot.last_error ?? "";
     error.hidden = !snapshot.last_error;
     list.replaceChildren(...adapters.map(adapterCard));
-    if (!adapters.length && snapshot.initialized && !snapshot.query_running && !snapshot.last_error) list.append(text("p", "Відеокарти не знайдені в інвентарі сервера.", "muted"));
+    if (!adapters.length && snapshot.initialized && !snapshot.query_running && !snapshot.last_error) list.append(text("p", "Відеокарти NVIDIA не знайдені в інвентарі сервера.", "muted"));
     refresh.disabled = snapshot.query_running || refreshing;
   }
   function schedule(snapshot) {

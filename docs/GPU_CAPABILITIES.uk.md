@@ -14,7 +14,7 @@
 
 - hardware/encoder_capabilities.py — фоновий single-flight manager, cache, snapshot API, timeout і shutdown cleanup.
 - hardware/gpu/probe.py — disposable child process для PCI/NVML/CUDA/GStreamer. Web process не імпортує GI й не ініціалізує CUDA.
-- PCI inventory охоплює display/3D controllers різних vendors. Детальна encoder-перевірка наразі реалізована для NVIDIA NVENC; Intel/AMD/інший GPU показується без приписування неперевірених можливостей.
+- PCI inventory включає лише display/3D controllers NVIDIA (PCI vendor ID 0x10de). ASPEED, Intel, AMD та інші виробники не потрапляють до результатів детектора, API та GPU-панелі. Encoder-перевірка реалізована для NVIDIA NVENC. Зміна коду детектора змінює fingerprint, тому попередній кеш із GPU інших виробників автоматично замінюється після оновлення.
 - nvidia-smi надає UUID, модель, PCI, драйвер і total VRAM. CUDA Driver API зіставляє CUDA ordinal із UUID та PCI. Nvidia-smi index не прирівнюється до CUDA ordinal, навіть на multi-GPU хості.
 - Параметри зчитуються зі структурованих caps/properties конкретних nvcodec encoder factories з read-only cuda-device-id. Auto-GPU та selectable-device factories не використовуються як доказ per-device можливостей. Не виконується кодування тестових кадрів і не створюється media pipeline.
 - GStreamer/plugin initialization може короткочасно створювати driver contexts/session probes для отримання caps. Наявність енкодера не доводить, що в момент запуску нового потоку є вільні ресурси.
