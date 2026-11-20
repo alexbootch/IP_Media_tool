@@ -32,17 +32,6 @@
   max-height: 260px;
   overflow: auto;
 }
-.decklink-port {
-  margin: 12px 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 12px;
-}
-.decklink-port > summary {
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1.6;
-}
 .decklink-modes > summary {
   cursor: pointer;
   font-size: 11px;

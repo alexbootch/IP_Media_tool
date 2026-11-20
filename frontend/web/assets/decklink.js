@@ -4,9 +4,6 @@ function text(tag, content, className = "") {
   element.className = className;
   return element;
 }
-function parameter(list, label, value) {
-  list.append(text("dt", label), text("dd", value ?? "Не надано"));
-}
 function modeLabel(mode) {
   const fps = mode.fps_num / mode.fps_den;
   const interlaced = mode.interlace_mode === "interleaved";
@@ -15,44 +12,45 @@ function modeLabel(mode) {
   const suffix = interlaced ? "i" : mode.interlace_mode === "progressive" ? "p" : ` ${mode.interlace_mode} `;
   return `${mode.width} × ${mode.height}${suffix}${rate} · ${mode.fps_num}/${mode.fps_den} кадр/с${mode.pixel_aspect_ratio ? ` · PAR ${mode.pixel_aspect_ratio}` : ""}${field ? ` · ${field}` : ""}${mode.format ? ` · ${mode.format}` : ""}`;
 }
-function modesPanel(port, direction, label) {
-  const modes = port[`${direction}_modes`] ?? [];
-  const panel = text("details", "", "decklink-modes");
-  panel.append(text("summary", `${label} · ${modes.length} режимів`));
-  if (modes.length) {
-    const list = text("ul", "", "decklink-mode-list");
-    list.append(...modes.map((mode) => text("li", modeLabel(mode))));
-    panel.append(list);
-  } else panel.append(text("p", "Список режимів не отримано; див. GStreamer caps.", "muted small-text"));
-  const raw = text("details", "", "gpu-raw");
-  raw.append(text("summary", "GStreamer caps"), text("pre", port[`${direction}_caps`] ?? "Не надано"));
-  panel.append(raw);
-  return panel;
-}
-function portCard(port) {
-  const panel = text("details", "", "decklink-port");
-  const directions = [port.has_input && "Вхід", port.has_output && "Вихід"].filter(Boolean).join(" / ");
-  panel.append(text("summary", `${port.display_name} · device ${port.device_number} · ${directions || "Напрямок не визначено"}`));
-  const info = text("dl", "", "gpu-parameters");
-  parameter(info, "Persistent ID", port.persistent_id);
-  parameter(info, "Gst device-number", port.device_number);
-  parameter(info, "Ідентифікація", { persistent: "ID від provider", session_index: "Індекс поточного сканування", ambiguous_persistent_id: "Повторний ID · використовується індекс" }[port.identity_status]);
-  if (port.has_input) {
-    parameter(info, "Автовизначення входу", port.supports_format_detection == null ? null : port.supports_format_detection ? "Так" : "Ні");
-    parameter(info, "Аудіоканали входу, до", port.input_max_audio_channels);
+function modesPanel(ports) {
+  const modes = new Map();
+  const totals = { input: 0, output: 0 };
+  for (const port of ports) {
+    for (const direction of ["input", "output"]) {
+      if (!port[`has_${direction}`]) continue;
+      totals[direction] += 1;
+      const seen = new Set();
+      for (const mode of port[`${direction}_modes`] ?? []) {
+        // Use full mode parameters: never collapse fractional rates, PAR or formats.
+        const key = JSON.stringify([mode.width, mode.height, mode.fps_num, mode.fps_den, mode.interlace_mode, mode.pixel_aspect_ratio ?? null, mode.field_order ?? null, mode.format ?? null]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (!modes.has(key)) modes.set(key, { mode, input: 0, output: 0 });
+        modes.get(key)[direction] += 1;
+      }
+    }
   }
-  if (port.has_output) parameter(info, "Аудіоканали виходу, до", port.output_max_audio_channels);
-  panel.append(info);
-  for (const warning of port.warnings ?? []) panel.append(text("p", warning, "gpu-message"));
-  if (port.has_input) panel.append(modesPanel(port, "input", "Вхід"));
-  if (port.has_output) panel.append(modesPanel(port, "output", "Вихід"));
+  const panel = text("details", "", "decklink-modes");
+  panel.append(text("summary", `Режими роботи · ${modes.size}`));
+  if (modes.size) {
+    const list = text("ul", "", "decklink-mode-list");
+    const ordered = [...modes.values()].sort((a, b) => a.mode.width - b.mode.width || a.mode.height - b.mode.height || a.mode.fps_num / a.mode.fps_den - b.mode.fps_num / b.mode.fps_den || modeLabel(a.mode).localeCompare(modeLabel(b.mode), "uk"));
+    for (const entry of ordered) {
+      const common = entry.input === totals.input && entry.output === totals.output;
+      const scope = common ? "" : ` · вхід ${entry.input}/${totals.input}, вихід ${entry.output}/${totals.output}`;
+      list.append(text("li", modeLabel(entry.mode) + scope));
+    }
+    panel.append(list);
+  } else panel.append(text("p", "Список режимів не отримано.", "muted small-text"));
   return panel;
 }
 function boardCard(board, ports) {
   const card = text("article", "", "gpu-adapter-card");
   card.append(text("h3", board.model_name));
-  card.append(text("p", board.serial_number ? `Серійний номер: ${board.serial_number} · портів: ${ports.length}` : "Серійний номер плати не надано. Цей порт показано окремо; групування з іншими портами не припускається.", "muted small-text"));
-  card.append(...ports.map(portCard));
+  card.append(text("p", `Входів: ${ports.filter((port) => port.has_input).length} · Виходів: ${ports.filter((port) => port.has_output).length}`, "muted small-text"));
+  if (board.ungrouped) card.append(text("p", "Сумарно для цієї моделі: прив’язка портів до окремих фізичних плат не визначена.", "muted small-text"));
+  if (ports.some((port) => port.query_status !== "complete")) card.append(text("p", "Частину даних про порти не підтверджено.", "gpu-message"));
+  card.append(modesPanel(ports));
   return card;
 }
 
@@ -80,22 +78,18 @@ export function initializeDeckLinkPanel({ request, role }) {
     summary.textContent = snapshot.query_running ? "Опитування портів…" : snapshot.stale ? "Попередні дані · потрібна перевірка" : `Вхід: ${ports.filter((port) => port.has_input).length} · Вихід: ${ports.filter((port) => port.has_output).length}`;
     indicator.className = `gpu-status ${snapshot.query_running ? "querying" : snapshot.last_error || snapshot.stale ? "failed" : snapshot.query_status === "complete" ? "complete" : "partial"}`;
     const date = snapshot.queried_at ? new Date(snapshot.queried_at).toLocaleString("uk-UA") : "ще не завершено";
-    status.textContent = `${snapshot.from_cache ? "Кеш" : "Останнє опитування"}: ${date}${snapshot.stale ? " · дані потребують перевірки" : ""}${snapshot.gstreamer_version ? ` · ${snapshot.gstreamer_version}` : ""}`;
+    status.textContent = `${snapshot.from_cache ? "Кеш" : "Останнє опитування"}: ${date}${snapshot.stale ? " · дані потребують перевірки" : ""}`;
     const failures = [snapshot.last_error, ...(snapshot.scan_errors ?? [])].filter(Boolean);
     error.textContent = failures.join("\n");
     error.hidden = !failures.length;
-    const info = text("dl", "", "gpu-parameters");
-    const driver = snapshot.driver ?? {};
-    parameter(info, "Драйвер завантажений", driver.loaded_driver_version);
-    parameter(info, "Драйвер встановлений", driver.installed_driver_version);
-    parameter(info, "Desktop Video", driver.desktop_video_package);
-    parameter(info, "Gst DeckLink plugin", snapshot.plugin_version);
-    parameter(info, "Плат із serial", boards.length);
-    parameter(info, "Портів без serial", ungrouped.length);
-    parameter(info, "PCI Blackmagic", driver.pci_devices?.map((device) => `${device.pci_bus_id} · ${device.kernel_driver ?? "без драйвера"}`).join(", ") || null);
-    devices.replaceChildren(info);
+    devices.replaceChildren();
     for (const board of boards) devices.append(boardCard(board, ports.filter((port) => port.board_id === board.board_id)));
-    for (const port of ungrouped) devices.append(boardCard({ model_name: port.model_name }, [port]));
+    const models = new Map();
+    for (const port of ungrouped) {
+      if (!models.has(port.model_name)) models.set(port.model_name, []);
+      models.get(port.model_name).push(port);
+    }
+    for (const [model, modelPorts] of models) devices.append(boardCard({ model_name: model, ungrouped: true }, modelPorts));
     if (!ports.length && snapshot.initialized && !snapshot.query_running && !failures.length) devices.append(text("p", "Provider не надав відеопортів DeckLink.", "muted"));
     refresh.disabled = queryRunning || refreshing;
   }
