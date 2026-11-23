@@ -1,0 +1,16 @@
+{
+  "$schema": "../../../schemas/v1/node-config.schema.json",
+  "schema_version": 1,
+  "id": "10000000-0000-4000-8000-000000000002",
+  "type": "reference-output",
+  "revision": 1,
+  "settings_version": 1,
+  "name": "Споживач · приклад",
+  "enabled": false,
+  "position": { "x": 520, "y": 160 },
+  "settings": {},
+  "connections": {
+    "media_in": { "source_node_id": "10000000-0000-4000-8000-000000000001", "source_port_id": "media_out" }
+  },
+  "secret_refs": {}
+}

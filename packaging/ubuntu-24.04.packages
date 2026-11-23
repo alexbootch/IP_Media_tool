@@ -12,6 +12,7 @@ python3-gst-1.0
 python3-fastapi
 python3-uvicorn
 python3-argon2
+python3-jsonschema
 gir1.2-gstreamer-1.0
 gir1.2-gst-plugins-base-1.0
 gir1.2-gst-plugins-bad-1.0

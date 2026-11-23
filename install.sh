@@ -31,6 +31,9 @@ done
 if [[ -n "$REQUESTED_TAG" ]]; then CHANNEL=stable; fi
 [[ "$(uname -s)" == Linux ]] || die 'Run on the Linux server only.'
 ((EUID == 0)) || die 'Run with sudo bash install.sh.'
+if systemctl is-active --quiet ip-media-tool-runtime.service; then
+    die 'Stop worker runtime before installation/update: sudo systemctl stop ip-media-tool-runtime. This stops active routes. Start runtime manually after updating; nodes are never resumed automatically.'
+fi
 # Keep OS variables (notably VERSION) out of the installer argument namespace.
 OS_PROFILE=$(
     source /etc/os-release
@@ -75,14 +78,14 @@ download "https://codeload.github.com/$REPOSITORY/tar.gz/$REVISION" "$WORK_DIR/s
 mkdir "$WORK_DIR/source"
 tar -xzf "$WORK_DIR/source.tar.gz" --strip-components=1 --no-same-owner --no-same-permissions -C "$WORK_DIR/source"
 SOURCE="$WORK_DIR/source"
-for file in src/converter/control/app.py frontend/web/login.html packaging/systemd/ip-media-tool.service tools/install/ip-media-tool-admin.sh tools/install/ip-media-tool-update.sh; do
+for file in src/converter/control/app.py frontend/web/login.html packaging/systemd/ip-media-tool.service packaging/systemd/ip-media-tool-runtime.service tools/install/ip-media-tool-admin.sh tools/install/ip-media-tool-update.sh; do
     [[ -f "$SOURCE/$file" ]] || die "Selected commit does not contain $file. Use a commit/channel with the web application."
 done
 PREREQUISITE_STATUS=0
 # The web control plane can be installed independently of NDI and optional media hardware.
 bash "$SOURCE/tools/install/install-components.sh" --yes --base-only || PREREQUISITE_STATUS=$?
 ((PREREQUISITE_STATUS != 1)) || die 'System dependency installation failed; active application unchanged.'
-for package in python3-fastapi python3-uvicorn python3-argon2; do
+for package in python3-fastapi python3-uvicorn python3-argon2 python3-jsonschema; do
     [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" == 'install ok installed' ]] || die "Web dependency missing: $package"
 done
 install_command() {
@@ -106,6 +109,7 @@ fi
 install -d -m 0755 /opt/ip-media-tool/releases /var/lib/ip-media-tool /etc/ip-media-tool
 install -d -m 0700 -o ip-media-tool -g ip-media-tool /var/lib/ip-media-tool/security
 install -d -m 0700 -o ip-media-tool -g ip-media-tool /var/lib/ip-media-tool/hardware
+install -d -m 0700 -o ip-media-tool -g ip-media-tool /etc/ip-media-tool/nodes
 # Supplementary device access without creating absent groups or changing driver/device permissions.
 for device_group in video render; do
     if getent group "$device_group" >/dev/null; then usermod -a -G "$device_group" ip-media-tool; fi
@@ -131,6 +135,7 @@ OLD_CURRENT=$(readlink -f /opt/ip-media-tool/current 2>/dev/null || true)
 WAS_RUNNING=0
 if systemctl is-active --quiet ip-media-tool.service; then WAS_RUNNING=1; fi
 install -m 0644 "$SOURCE/packaging/systemd/ip-media-tool.service" /etc/systemd/system/ip-media-tool.service
+install -m 0644 "$SOURCE/packaging/systemd/ip-media-tool-runtime.service" /etc/systemd/system/ip-media-tool-runtime.service
 install_command "$SOURCE/tools/install/ip-media-tool-admin.sh" /usr/local/sbin/ip-media-tool-admin
 LINK_TEMP="/opt/ip-media-tool/.current.$$"
 ln -s -- "$RELEASE_DIR" "$LINK_TEMP"
@@ -153,6 +158,7 @@ mv -f -- "$STATE_TEMP" /var/lib/ip-media-tool/installed-revision
 printf '\nIP Media Tool web application installed.\n'
 printf '%s\n' 'First setup: ip-media-tool-admin bootstrap' \
     'Manual start: sudo systemctl start ip-media-tool' \
+    'Manual worker runtime: sudo systemctl start ip-media-tool-runtime (does not start nodes)' \
     'Browser: http://SERVER-IP:8080' \
     'Updates: ip-media-tool-update (main by default; restarts only an already running web service)'
 if ((PREREQUISITE_STATUS != 0)); then

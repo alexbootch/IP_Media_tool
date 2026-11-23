@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Worker runtime status v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "node_id", "node_type", "instance_id", "config_revision", "status_revision", "state", "updated_at", "error", "metrics"],
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 512 },
+    "schema_version": { "const": 1 },
+    "node_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "node_type": { "$ref": "common.schema.json#/$defs/node_type" },
+    "instance_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "config_revision": { "$ref": "common.schema.json#/$defs/revision" },
+    "status_revision": { "$ref": "common.schema.json#/$defs/revision" },
+    "state": { "enum": ["stopped", "starting", "waiting_source", "waiting_signal", "running", "stopping", "error"] },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "error": { "anyOf": [{ "type": "null" }, { "$ref": "common.schema.json#/$defs/error" }] },
+    "metrics": {
+      "type": "object", "propertyNames": { "$ref": "common.schema.json#/$defs/identifier" },
+      "additionalProperties": { "type": ["number", "string", "boolean", "null"] }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "state": { "const": "error" } } },
+      "then": { "properties": { "error": { "$ref": "common.schema.json#/$defs/error" } } },
+      "else": { "properties": { "error": { "type": "null" } } }
+    }
+  ]
+}

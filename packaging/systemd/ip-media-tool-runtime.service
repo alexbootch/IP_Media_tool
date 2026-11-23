@@ -1,0 +1,33 @@
+[Unit]
+Description=IP Media Tool worker runtime
+After=network.target
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=ip-media-tool
+Group=ip-media-tool
+WorkingDirectory=/opt/ip-media-tool/current
+Environment=PYTHONPATH=/opt/ip-media-tool/current/src
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=IP_MEDIA_TOOL_NODE_DIR=/etc/ip-media-tool/nodes
+Environment=IP_MEDIA_TOOL_RUNTIME_SOCKET=/run/ip-media-tool/runtime.sock
+EnvironmentFile=-/etc/ip-media-tool/environment
+ExecStart=/usr/bin/python3 -m converter.runtime.service
+RuntimeDirectory=ip-media-tool
+RuntimeDirectoryMode=0700
+KillMode=control-group
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/ip-media-tool/nodes /run/ip-media-tool
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

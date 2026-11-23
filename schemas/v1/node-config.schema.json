@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Node instance configuration v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "type", "revision", "settings_version", "name", "enabled", "position", "settings", "connections", "secret_refs"],
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 512 },
+    "schema_version": { "const": 1 },
+    "id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "type": { "$ref": "common.schema.json#/$defs/node_type" },
+    "revision": { "$ref": "common.schema.json#/$defs/revision" },
+    "settings_version": { "$ref": "common.schema.json#/$defs/revision" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "enabled": { "type": "boolean", "description": "Permits explicit start; never grants automatic startup." },
+    "position": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y"],
+      "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+    },
+    "settings": { "type": "object", "description": "Also validate against the selected plugin config.schema.json; secret values are forbidden." },
+    "connections": {
+      "type": "object", "maxProperties": 64,
+      "propertyNames": { "$ref": "common.schema.json#/$defs/identifier" },
+      "additionalProperties": {
+        "type": "object", "additionalProperties": false,
+        "required": ["source_node_id", "source_port_id"],
+        "properties": {
+          "source_node_id": { "$ref": "common.schema.json#/$defs/uuid" },
+          "source_port_id": { "$ref": "common.schema.json#/$defs/identifier" }
+        }
+      }
+    },
+    "secret_refs": {
+      "type": "object", "propertyNames": { "$ref": "common.schema.json#/$defs/identifier" },
+      "additionalProperties": { "type": "string", "pattern": "^secret:[a-zA-Z0-9_-]{1,128}$" }
+    }
+  }
+}

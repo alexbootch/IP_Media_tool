@@ -20,4 +20,16 @@
 - CPU/RAM of the current server do not define the product architecture. Discover device capabilities dynamically.
 - Recorded driver baseline: Blackmagic Desktop Video 16.4a1 and NVIDIA 580.178.04. These are inventory versions pending media compatibility validation.
 
+## Node module rules
+
+- Follow docs/NODE_STANDARD.uk.md and node-sdk/README.md for every new node.
+- Every node type owns manifest.json, config.schema.json, worker.py, ui.js, styles.css and README.md. Every instance owns its ID, config, worker process and runtime resources.
+- Never import another node's implementation. Shared lifecycle, IPC, contracts and logging belong in node-sdk; protocol pipelines belong in the node worker.
+- Use the same names/signatures for equivalent operations. Python and JSON use snake_case, JavaScript uses camelCase; CSS selectors are scoped to the node type and instance container.
+- Document every function/method, including private helpers: Python docstrings and JavaScript JSDoc. Document nontrivial callbacks too.
+- Node CSS uses shared design tokens/components and never changes unrelated nodes or global styles.
+- Keep configuration separate from runtime status. Persist consumer-owned connections and coordinates in the instance config; never persist PID, live caps, endpoints or counters there.
+- Preserve unknown capabilities, exact fractional rates and audio layout. Never silently remix audio or infer supported modes from a static catalog.
+- Use shared lifecycle/error codes, versioned schemas, structured logs without secrets, central hardware reservations and bounded cleanup/recovery. One output must not block its producer or other outputs.
+
 Refer to docs/LOCAL_DEVELOPMENT.uk.md, docs/PLAN.uk.md and docs/INSTALL_UPDATE.uk.md for the development and release workflow.

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Private inherited worker channel bootstrap v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "config", "instance_id", "leases"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "config": { "$ref": "node-config.schema.json" },
+    "instance_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "leases": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["provider", "resource_id", "direction"],
+        "properties": {
+          "provider": { "const": "decklink" },
+          "resource_id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "direction": { "enum": ["input", "output"] }
+        }
+      }
+    }
+  }
+}

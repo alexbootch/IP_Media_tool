@@ -1,0 +1,42 @@
+{
+  "$schema": "../../../schemas/v1/media-contract.schema.json",
+  "schema_version": 1,
+  "source_node_id": "10000000-0000-4000-8000-000000000001",
+  "source_port_id": "media_out",
+  "instance_id": "20000000-0000-4000-8000-000000000001",
+  "contract_revision": 1,
+  "transport_generation": "30000000-0000-4000-8000-000000000001",
+  "state": "ready",
+  "video": {
+    "stream_id": "video_0",
+    "endpoint_id": "video_buffer",
+    "caps": "video/x-raw,format=UYVY,width=1920,height=1080,framerate=25/1,interlace-mode=interleaved,field-order=top-field-first,pixel-aspect-ratio=1/1",
+    "width": 1920,
+    "height": 1080,
+    "format": "UYVY",
+    "framerate": { "fps_num": 25, "fps_den": 1 },
+    "pixel_aspect_ratio": { "par_num": 1, "par_den": 1 },
+    "interlace_mode": "interleaved",
+    "field_order": "top-field-first",
+    "colorimetry": null,
+    "hdr_metadata": null
+  },
+  "audio": [
+    {
+      "stream_id": "audio_0",
+      "endpoint_id": "audio_buffer_0",
+      "caps": "audio/x-raw,format=S32LE,rate=48000,channels=8,layout=interleaved",
+      "format": "S32LE",
+      "sample_rate": 48000,
+      "channels": 8,
+      "layout": "interleaved",
+      "channel_labels": null,
+      "channel_mask": null
+    }
+  ],
+  "endpoints": [
+    { "endpoint_id": "video_buffer", "transport": "shm", "descriptor_version": 1, "descriptor": {} },
+    { "endpoint_id": "audio_buffer_0", "transport": "shm", "descriptor_version": 1, "descriptor": {} }
+  ],
+  "timing": { "model_version": 1, "clock_domain_id": "40000000-0000-4000-8000-000000000001", "timestamp_unit": "ns" }
+}

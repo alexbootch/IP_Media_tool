@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IP Media Tool common definitions v1",
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "identifier": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
+    "node_type": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", "maxLength": 64 },
+    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "retryable"],
+      "properties": {
+        "code": {
+          "anyOf": [
+            { "enum": ["invalid_config", "incompatible_version", "dependency_unavailable", "hardware_unavailable", "resource_busy", "source_unavailable", "unsupported_format", "transport_error", "pipeline_error", "timeout", "internal_error"] },
+            { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*\\.[a-z][a-z0-9_]*$", "maxLength": 128 }
+          ]
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "retryable": { "type": "boolean" }
+      }
+    }
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ready producer media contract v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "source_node_id", "source_port_id", "instance_id", "contract_revision", "transport_generation", "state", "video", "audio", "endpoints", "timing"],
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 512 },
+    "schema_version": { "const": 1 },
+    "source_node_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "source_port_id": { "$ref": "common.schema.json#/$defs/identifier" },
+    "instance_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "contract_revision": { "$ref": "common.schema.json#/$defs/revision" },
+    "transport_generation": { "$ref": "common.schema.json#/$defs/uuid" },
+    "state": { "const": "ready" },
+    "video": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/video" }] },
+    "audio": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/audio" } },
+    "endpoints": {
+      "type": "array", "minItems": 1, "maxItems": 257,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["endpoint_id", "transport", "descriptor_version", "descriptor"],
+        "properties": {
+          "endpoint_id": { "$ref": "common.schema.json#/$defs/identifier" },
+          "transport": { "const": "shm" },
+          "descriptor_version": { "$ref": "common.schema.json#/$defs/revision" },
+          "descriptor": { "type": "object", "description": "Transport implementation must additionally validate ABI, bounds, ownership and endpoint paths. Not a process pointer." }
+        }
+      }
+    },
+    "timing": {
+      "type": "object", "additionalProperties": false,
+      "required": ["model_version", "clock_domain_id", "timestamp_unit"],
+      "properties": {
+        "model_version": { "const": 1 },
+        "clock_domain_id": { "$ref": "common.schema.json#/$defs/uuid" },
+        "timestamp_unit": { "const": "ns" }
+      }
+    }
+  },
+  "anyOf": [
+    { "properties": { "video": { "$ref": "#/$defs/video" } } },
+    { "properties": { "audio": { "minItems": 1 } } }
+  ],
+  "$defs": {
+    "video": {
+      "type": "object", "additionalProperties": false,
+      "required": ["stream_id", "endpoint_id", "caps", "width", "height", "format", "framerate", "pixel_aspect_ratio", "interlace_mode", "field_order", "colorimetry", "hdr_metadata"],
+      "properties": {
+        "stream_id": { "$ref": "common.schema.json#/$defs/identifier" },
+        "endpoint_id": { "$ref": "common.schema.json#/$defs/identifier" },
+        "caps": { "type": "string", "pattern": "^video/x-raw(?:\\([^)]*\\))?(?:\\s*[,;]|$)", "maxLength": 16000 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "format": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "framerate": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object", "additionalProperties": false, "required": ["fps_num", "fps_den"],
+              "properties": { "fps_num": { "type": "integer", "minimum": 1 }, "fps_den": { "type": "integer", "minimum": 1 } }
+            }
+          ]
+        },
+        "pixel_aspect_ratio": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object", "additionalProperties": false, "required": ["par_num", "par_den"],
+              "properties": { "par_num": { "type": "integer", "minimum": 1 }, "par_den": { "type": "integer", "minimum": 1 } }
+            }
+          ]
+        },
+        "interlace_mode": { "enum": [null, "progressive", "interleaved", "mixed", "fields", "alternate"] },
+        "field_order": { "enum": [null, "top-field-first", "bottom-field-first"] },
+        "colorimetry": { "type": ["string", "null"], "maxLength": 256 },
+        "hdr_metadata": { "type": ["object", "null"], "description": "Only metadata actually supplied by the source; transport validation defines its encoding." }
+      }
+    },
+    "audio": {
+      "type": "object", "additionalProperties": false,
+      "required": ["stream_id", "endpoint_id", "caps", "format", "sample_rate", "channels", "layout", "channel_labels", "channel_mask"],
+      "properties": {
+        "stream_id": { "$ref": "common.schema.json#/$defs/identifier" },
+        "endpoint_id": { "$ref": "common.schema.json#/$defs/identifier" },
+        "caps": { "type": "string", "pattern": "^audio/x-raw(?:\\([^)]*\\))?(?:\\s*[,;]|$)", "maxLength": 16000 },
+        "format": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "sample_rate": { "type": "integer", "minimum": 1 },
+        "channels": { "type": "integer", "minimum": 1 },
+        "layout": { "enum": ["interleaved", "non-interleaved"] },
+        "channel_labels": { "anyOf": [{ "type": "null" }, { "type": "array", "items": { "type": ["string", "null"], "maxLength": 80 } }] },
+        "channel_mask": { "type": ["string", "null"], "pattern": "^0x[0-9a-fA-F]{1,16}$", "description": "String preserves 64-bit precision in JavaScript; null means unknown." }
+      }
+    }
+  }
+}

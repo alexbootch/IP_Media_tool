@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Runtime-worker IPC envelope v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "message_id", "request_id", "node_id", "instance_id", "kind", "payload"],
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 512 },
+    "schema_version": { "const": 1 },
+    "message_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "request_id": { "anyOf": [{ "type": "null" }, { "$ref": "common.schema.json#/$defs/uuid" }] },
+    "node_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "instance_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "kind": { "enum": ["command", "ack", "status", "contract", "contract_withdrawn", "error"] },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "status" } } },
+      "then": { "properties": { "payload": { "$ref": "node-status.schema.json" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "contract" } } },
+      "then": { "properties": { "payload": { "$ref": "media-contract.schema.json" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "error" } } },
+      "then": { "properties": { "payload": { "$ref": "common.schema.json#/$defs/error" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "enum": ["command", "ack", "error"] } } },
+      "then": { "properties": { "request_id": { "$ref": "common.schema.json#/$defs/uuid" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "command" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object", "additionalProperties": false, "required": ["command", "config_revision"],
+            "properties": { "command": { "enum": ["start", "stop", "get_status", "resync"] }, "config_revision": { "$ref": "common.schema.json#/$defs/revision" } }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "ack" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object", "additionalProperties": false, "required": ["accepted"],
+            "properties": { "accepted": { "const": true } }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "contract_withdrawn" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "type": "object", "additionalProperties": false,
+            "required": ["source_node_id", "source_port_id", "instance_id", "contract_revision", "transport_generation", "reason"],
+            "properties": {
+              "source_node_id": { "$ref": "common.schema.json#/$defs/uuid" },
+              "source_port_id": { "$ref": "common.schema.json#/$defs/identifier" },
+              "instance_id": { "$ref": "common.schema.json#/$defs/uuid" },
+              "contract_revision": { "$ref": "common.schema.json#/$defs/revision" },
+              "transport_generation": { "$ref": "common.schema.json#/$defs/uuid" },
+              "reason": { "type": "string", "minLength": 1, "maxLength": 500 }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

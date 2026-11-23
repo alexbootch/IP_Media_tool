@@ -1,6 +1,6 @@
 # План реалізації Converter
 
-Оновлено: 2026-11-17. Структура каталогів підготовлена. Усі задачі реалізації нижче ще відкриті; існування каталогу не означає готовність функції.
+Оновлено: 2026-11-20. Підготовлено структуру, web/auth і hardware detector code; стандарт незалежних нод та схеми v1 записані. Існування каталогу або схеми не означає готовність runtime. Виконані роботи й обмеження зазначені в кожному етапі.
 
 Правило всіх етапів: Windows workspace — тільки код, документація й Git review. Локальні tests/builds/application runs заборонені. Усі виконувані перевірки в цьому плані стосуються Linux і запускаються користувачем вручну; release builds виконуються у визначеному Linux build environment за його дією. Git push не запускає deployment. [Локальний workflow](LOCAL_DEVELOPMENT.uk.md).
 
@@ -22,15 +22,27 @@
 
 ## Етап 1. Проєктування та схеми
 
-- [ ] Схеми node config, manifest, connection, media contract, IPC і capabilities; exact fractional rates та unknown states.
-- [ ] Описати API node-sdk, lifecycle, публікацію контракту, handshake/generation switch і відновлення підписок.
+Результат 2026-11-20: [стандарт ноди](NODE_STANDARD.uk.md), [API SDK v1](../node-sdk/README.md), [схеми v1](../schemas/v1/README.md) та [інертні приклади](../examples/nodes/reference/README.md). Правила незалежності, worker/CSS/UI файлів, naming, docstrings/JSDoc, спільного стилю, lifecycle/errors, ресурсів і незмінності аудіо закріплені також у AGENTS.md. Це завершений пакет специфікації; runtime validators, SDK implementation, transport ABI/clock mapping та виконуване приймання ще не завершені. Локальні tests/imports/schema validation не запускалися.
+
+- [x] Зафіксувати погоджений стандарт модуля та єдині Python/JavaScript API names.
+- [x] Написати JSON-схеми manifest, node config/connection, worker status, media contract та IPC envelope; додати статичні приклади.
+
+- [ ] Доповнити capability snapshot schema та transport-specific descriptor/ABI schemas; загальні node config, manifest, contract і IPC v1 вже написані.
+- [ ] Уточнити handshake/generation switch і resync semantics на рівні transport; публічні назви методів SDK та lifecycle вже описані.
 - [ ] Описати часову модель, вимоги до SHM і критерії майбутніх транспортних тестів; відкриті рішення позначити явно.
-- [ ] Підготувати приклади конфігів і опис меж модулів, runtime-каталогів, залежностей та пакування.
+- [ ] Уточнити пакування плагінів і міграції settings; інертні приклади конфігів, межі модулів та runtime paths вже описані.
+- [x] Написати offline schema registry, config/module/graph validators та атомарний writer з revision CAS, backup, API й installer dependencies. Завершено після переривання 2026-11-23; [обсяг та межі](NODE_CONFIG_STORAGE.uk.md). Код локально не виконувався.
+- [ ] Прийняти config store на Linux: stale revision, malformed/duplicate JSON, цикли, unavailable module, symlink escape та збій atomic replace/fsync. Media readiness й IPC session validation — наступні етапи.
 - [ ] Визначити правила експериментів: окреме середовище, відокремлені результати та прибирання ресурсів.
 
 Умова завершення: узгоджені межі модулів, схеми та контракти, визначені відкриті технічні питання й критерії їх перевірки. Медіапрототип на цьому етапі не створюється.
 
 ## Етап 2. Каркас системи та керування
+
+Lifecycle 2026-11-23: написано Python node-sdk, inherited-FD worker host, незалежний runtime service, Unix RPC/client, start/stop/status API, deadlines і bounded crash recovery (3 retries). Config mutations координує runtime, активні ноди треба зупинити перед edit/delete. Systemd unit встановлюється без автозапуску, update потребує ручного stop runtime. [Обсяг, обмеження та серверне приймання](WORKER_RUNTIME.uk.md). Регресійні tests написані як source, локально не запускалися. Медіатранспорт/contract routing/secret broker ще не реалізовані.
+
+- [x] Написати SDK lifecycle, окремий supervisor process, статуси, stop/start cancellation, deadlines і обмежене recovery без autostart.
+- [ ] Прийняти SDK/runtime на Linux: subprocess crash/hang, systemd cleanup, незалежність web, version mismatch і активні config edits.
 
 Реалізація 2026-11-19: написано FastAPI web shell, login/session/roles, file-backed users і browser user management; installer створює systemd unit, ip-media-tool-admin та main-channel updater. Локально не запускалося, [серверне приймання](WEB_AUTH.uk.md) відкрите. Graph/runtime/mock workers цього етапу ще не реалізовані.
 

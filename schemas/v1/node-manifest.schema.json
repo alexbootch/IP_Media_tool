@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Node type manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "type", "version", "sdk_version", "settings_version", "name", "kind", "worker", "ui", "config_schema", "ports", "requirements"],
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 512 },
+    "schema_version": { "const": 1 },
+    "type": { "$ref": "common.schema.json#/$defs/node_type" },
+    "version": { "$ref": "common.schema.json#/$defs/version" },
+    "sdk_version": { "const": 1 },
+    "settings_version": { "$ref": "common.schema.json#/$defs/revision" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "description": { "type": "string", "maxLength": 1000 },
+    "kind": { "enum": ["input", "output", "processor"] },
+    "worker": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "class_name"],
+      "properties": { "path": { "const": "worker.py" }, "class_name": { "const": "Worker" } }
+    },
+    "ui": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "stylesheet"],
+      "properties": { "path": { "const": "ui.js" }, "stylesheet": { "const": "styles.css" } }
+    },
+    "config_schema": { "const": "config.schema.json" },
+    "ports": {
+      "type": "array", "maxItems": 64, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "name", "direction", "contract_type", "required"],
+        "properties": {
+          "id": { "$ref": "common.schema.json#/$defs/identifier" },
+          "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "direction": { "enum": ["input", "output"] },
+          "contract_type": { "const": "raw_av" },
+          "required": { "type": "boolean" }
+        }
+      }
+    },
+    "resource_bindings": {
+      "type": "array", "maxItems": 64, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["provider", "setting", "direction"],
+        "properties": {
+          "provider": { "const": "decklink" },
+          "setting": { "$ref": "common.schema.json#/$defs/identifier" },
+          "direction": { "enum": ["input", "output"] }
+        }
+      }
+    },
+    "requirements": {
+      "type": "object", "additionalProperties": false,
+      "required": ["gstreamer_factories", "capabilities"],
+      "properties": {
+        "gstreamer_factories": {
+          "type": "array", "uniqueItems": true, "maxItems": 32,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$", "maxLength": 100 }
+        },
+        "capabilities": {
+          "type": "array", "uniqueItems": true,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["provider", "name", "required"],
+            "properties": {
+              "provider": { "enum": ["decklink", "gpu", "network", "protocol"] },
+              "name": { "$ref": "common.schema.json#/$defs/identifier" },
+              "required": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

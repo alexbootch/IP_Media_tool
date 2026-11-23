@@ -1,0 +1,13 @@
+{
+  "$schema": "../../../schemas/v1/node-status.schema.json",
+  "schema_version": 1,
+  "node_id": "10000000-0000-4000-8000-000000000001",
+  "node_type": "reference-input",
+  "instance_id": "20000000-0000-4000-8000-000000000001",
+  "config_revision": 1,
+  "status_revision": 1,
+  "state": "waiting_signal",
+  "updated_at": "2026-11-20T12:00:00Z",
+  "error": null,
+  "metrics": { "frames_received": 0, "audio_samples_received": 0 }
+}

@@ -9,6 +9,10 @@ GitHub: [alexbootch/IP_Media_tool](https://github.com/alexbootch/IP_Media_tool).
 Статус на 2026-11-19: написано перший web control plane — вхід, захищена оболонка робочого простору й адміністрування користувачів без DB. Installer/updater підтримують публічну main гілку. Код локально не запускався; серверне приймання виконує користувач. Медіаноди ще не реалізовані.
 
 - [План реалізації](docs/PLAN.uk.md)
+- [Стандарт незалежної ноди](docs/NODE_STANDARD.uk.md)
+- [Валідатори, реєстр модулів і атомарне сховище](docs/NODE_CONFIG_STORAGE.uk.md)
+- [Node SDK і керування воркерами](docs/WORKER_RUNTIME.uk.md)
+- [Специфікація node-sdk](node-sdk/README.md) · [JSON-схеми v1](schemas/v1/README.md)
 - [Вебінтерфейс, перший запуск і користувачі](docs/WEB_AUTH.uk.md)
 - [GPU capabilities у шапці](docs/GPU_CAPABILITIES.uk.md)
 - [DeckLink: плати, порти та режими у шапці](docs/DECKLINK_CAPABILITIES.uk.md)

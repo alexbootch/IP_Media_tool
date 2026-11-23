@@ -1,0 +1,17 @@
+{
+  "$schema": "../../../schemas/v1/node-manifest.schema.json",
+  "schema_version": 1,
+  "type": "reference-output",
+  "version": "0.1.0",
+  "sdk_version": 1,
+  "settings_version": 1,
+  "name": "Приклад структури виходу",
+  "kind": "output",
+  "worker": { "path": "worker.py", "class_name": "Worker" },
+  "ui": { "path": "ui.js", "stylesheet": "styles.css" },
+  "config_schema": "config.schema.json",
+  "ports": [
+    { "id": "media_in", "name": "Медіавхід", "direction": "input", "contract_type": "raw_av", "required": true }
+  ],
+  "requirements": { "gstreamer_factories": [], "capabilities": [] }
+}

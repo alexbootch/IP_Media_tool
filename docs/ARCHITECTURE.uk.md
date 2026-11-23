@@ -14,6 +14,7 @@
 - Стабільні ID нод не залежать від назви або координат. Endpoint SHM, PID, поточні caps та стани не є постійним конфігом.
 - NDI підтримує Discovery Server і send/receive groups на рівні runtime; для пошуку входів потрібні одночасні mDNS + server. Обмеження sender та конфігурація — у [NDI discovery](NDI_DISCOVERY.uk.md). OMT відкладено; власний plugin не розробляємо.
 - GPU і DeckLink можливості виявляються на хості, а доступні параметри нод визначаються за результатами детекції.
+- Стандарт незалежних модулів, naming, CSS scope та документація кожної функції погоджені 2026-11-20: [NODE_STANDARD](NODE_STANDARD.uk.md), [SDK v1](../node-sdk/README.md), [схеми](../schemas/v1/README.md). Один тип має власні worker/UI/CSS; екземпляри працюють у різних процесах і не імпортують код інших нод.
 
 ## Рекомендований поділ процесів
 
@@ -36,20 +37,20 @@ systemd контролює core-сервіси, runtime контролює worke
 ## Конфіги без DB
 
 ```text
-/etc/converter/system.json
-/etc/converter/nodes/<node-id>.json
-/etc/converter/security/              users, protected credentials
-/run/converter/                       sockets, reconstructed runtime state
-/dev/shm/converter/                   media allocation, if required by chosen transport
-/var/lib/converter/                   capability cache, backups, update state
-/var/log/converter/                   rotated audit and diagnostic files if used
-/opt/converter/releases/<version>/    immutable application runtime
-/opt/converter/current               active release pointer
+/etc/ip-media-tool/system.json
+/etc/ip-media-tool/nodes/<node-id>.json
+/var/lib/ip-media-tool/security/           users, protected credentials
+/run/ip-media-tool/                        sockets, reconstructed runtime state
+/dev/shm/ip-media-tool/                    media allocation, if required by chosen transport
+/var/lib/ip-media-tool/                    capability cache, backups, update state
+/var/log/ip-media-tool/                    rotated audit and diagnostic files if used
+/opt/ip-media-tool/releases/<revision>/    immutable application runtime
+/opt/ip-media-tool/current                active revision pointer
 ```
 
 Остаточне розташування media allocation залежить від реалізації SHM; socket-path не є адресою буфера.
 
-Кожен конфіг ноди містить schema_version, id, type, name, enabled, position, settings та connections. Зміни проходять через одного writer service: schema validation -> revision check -> запис тимчасового файла -> fsync -> atomic replace -> fsync каталогу. Конкурентні зміни відхиляються за revision. Для multi-node операцій потрібні transaction journal і recovery або інший перевірений протокол фіксації; атомарність окремого файла не гарантує атомарність кількох файлів.
+Кожен конфіг ноди містить schema_version, id, type, revision, settings_version, name, enabled, position, settings, connections та secret_refs за схемою v1. Enabled дозволяє ручний запуск, а не autostart. Зміни проходять через одного writer service: schema validation -> revision check -> запис тимчасового файла -> fsync -> atomic replace -> fsync каталогу. Конкурентні зміни відхиляються за revision. Для multi-node операцій потрібні transaction journal і recovery або інший перевірений протокол фіксації; атомарність окремого файла не гарантує атомарність кількох файлів.
 
 Невалідний конфіг ізолюється з діагностикою. Відсутнє джерело зберігається як unresolved connection. Видалення джерела не повинно мовчки стирати посилання у споживачів. Цикли та несумісні порти перевіряються перед запуском. Експорт графа — пакет конфігів, імпорт перевіряє колізії ID.
 

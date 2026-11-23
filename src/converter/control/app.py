@@ -10,10 +10,15 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from converter.security.store import AccessError, IdentityStore
 from converter.hardware.encoder_capabilities import EncoderCapabilityManager
 from converter.hardware.decklink_capabilities import DeckLinkCapabilityManager
+from converter.config.validation import ConfigError, SchemaRegistry, decode_json
+from converter.config.modules import ModuleRegistry
+from converter.config.store import NodeConfigStore
+from converter.runtime.client import RuntimeClient
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -27,11 +32,21 @@ ENCODERS = EncoderCapabilityManager(os.environ.get(
 DECKLINK = DeckLinkCapabilityManager(os.environ.get(
     "IP_MEDIA_TOOL_DECKLINK_CACHE", "/var/lib/ip-media-tool/hardware/decklink-capabilities.json"
 ))
+SCHEMAS = None
+MODULES = None
+NODES = None
+RUNTIME = RuntimeClient(os.environ.get("IP_MEDIA_TOOL_RUNTIME_SOCKET", "/run/ip-media-tool/runtime.sock"), ROOT.name)
 
 
 @asynccontextmanager
 async def lifespan(application):
+    global SCHEMAS, MODULES, NODES
     STORE.initialize()
+    SCHEMAS = SchemaRegistry(ROOT / "schemas" / "v1")
+    MODULES = ModuleRegistry(ROOT / "plugins", SCHEMAS)
+    MODULES.scan()
+    NODES = NodeConfigStore(os.environ.get("IP_MEDIA_TOOL_NODE_DIR", "/etc/ip-media-tool/nodes"), MODULES)
+    NODES.initialize()
     ENCODERS.initialize()
     DECKLINK.initialize()
     try:
@@ -47,6 +62,12 @@ app = FastAPI(title="IP Media Tool", docs_url=None, redoc_url=None, openapi_url=
 @app.exception_handler(AccessError)
 async def access_error(request, error):
     return JSONResponse({"detail": str(error)}, status_code=error.status)
+
+
+@app.exception_handler(ConfigError)
+async def config_error(request, error):
+    """Return safe config diagnostics without echoing instance values or secrets."""
+    return JSONResponse({"detail": str(error), "code": error.code, "issues": error.issues}, status_code=error.status)
 
 
 @app.middleware("http")
@@ -135,6 +156,90 @@ def login(body: Login, request: Request):
 @app.get("/api/session")
 def session(current=Depends(identity)):
     return {"user": current[0], "csrf": current[1]}
+
+
+def node_editor(current=Depends(identity)):
+    """Authorize explicit configuration mutations for administrators and operators."""
+    if current[0]["role"] not in {"admin", "operator"}:
+        raise HTTPException(403, "Потрібні права адміністратора або оператора.")
+    return current[0]
+
+
+@app.get("/api/node-modules")
+def node_modules(current=Depends(identity)):
+    """List registered node types without importing or starting their workers."""
+    return MODULES.snapshot()
+
+
+@app.get("/api/nodes")
+def node_configs(current=Depends(identity)):
+    """Return stored node configs and unresolved/invalid configuration diagnostics."""
+    return NODES.snapshot()
+
+
+@app.get("/api/nodes/{node_id}")
+def node_config(node_id: str, current=Depends(identity)):
+    """Read a single versioned configuration by canonical UUID."""
+    return NODES.get(node_id)
+
+
+@app.post("/api/nodes", status_code=201)
+async def create_node_config(request: Request, actor=Depends(node_editor)):
+    """Strictly decode and create revision one without launching any worker."""
+    config = decode_json(await request.body())
+    result = await run_in_threadpool(RUNTIME.call, "save_config", config=config, expected_revision=0)
+    STORE.record("node.create", actor["username"], node_id=result["node"]["id"], revision=result["node"]["revision"])
+    return result
+
+
+@app.put("/api/nodes/{node_id}")
+async def update_node_config(node_id: str, request: Request, expected_revision: int, actor=Depends(node_editor)):
+    """Compare revisions under lock before atomically replacing one config."""
+    config = decode_json(await request.body())
+    if not isinstance(config, dict) or config.get("id") != node_id:
+        raise ConfigError("invalid_config", "Config ID must match the URL node ID.")
+    if expected_revision < 1:
+        raise ConfigError("revision_conflict", "Update requires a current revision; use POST to create.", 409)
+    result = await run_in_threadpool(RUNTIME.call, "save_config", config=config, expected_revision=expected_revision)
+    STORE.record("node.update", actor["username"], node_id=node_id, revision=result["node"]["revision"])
+    return result
+
+
+@app.delete("/api/nodes/{node_id}")
+def delete_node_config(node_id: str, expected_revision: int, actor=Depends(node_editor)):
+    """Delete one revision, retaining the backup and consumer references."""
+    RUNTIME.call("delete_config", node_id=node_id, expected_revision=expected_revision)
+    STORE.record("node.delete", actor["username"], node_id=node_id, revision=expected_revision)
+    return {"deleted": node_id}
+
+
+@app.get("/api/workers")
+def worker_statuses(offset: int = 0, current=Depends(identity)):
+    """Read one page of runtime snapshots; never start a worker by reading status."""
+    return RUNTIME.call("list", offset=offset)
+
+
+@app.get("/api/nodes/{node_id}/status")
+def worker_status(node_id: str, current=Depends(identity)):
+    """Read live runtime state separately from the saved configuration."""
+    NODES.get(node_id)
+    return RUNTIME.call("status", node_id=node_id)
+
+
+@app.post("/api/nodes/{node_id}/start", status_code=202)
+def start_worker(node_id: str, expected_revision: int, actor=Depends(node_editor)):
+    """Explicitly start the requested config revision; acceptance is not readiness."""
+    result = RUNTIME.call("start", node_id=node_id, expected_revision=expected_revision)
+    STORE.record("node.start", actor["username"], node_id=node_id, revision=expected_revision)
+    return result
+
+
+@app.post("/api/nodes/{node_id}/stop", status_code=202)
+def stop_worker(node_id: str, actor=Depends(node_editor)):
+    """Cancel recovery and request a bounded stop of this node alone."""
+    result = RUNTIME.call("stop", node_id=node_id)
+    STORE.record("node.stop", actor["username"], node_id=node_id)
+    return result
 
 
 @app.get("/api/hardware/encoder-capabilities")
