@@ -80,15 +80,13 @@ sudo systemctl status ip-media-tool-runtime --no-pager
 
 Після цього start кожної ноди — окрема дія API/майбутнього graph UI. Наявність unit і enabled config не запускає медіапроцеси. Поки штатних plugins ще немає, runtime може показувати порожній список — це очікувано.
 
-Наступне оновлення при активному runtime блокується до ручного maintenance:
+Під час ручного оновлення updater сам зупиняє активні служби перед перемиканням коміту. Після активації він відновлює раніше активні runtime і вебсервіс.
 
 ```bash
-sudo systemctl stop ip-media-tool-runtime
 ip-media-tool-update
-sudo systemctl start ip-media-tool-runtime
 ```
 
-Stop runtime завершує всі потоки. Після update ноди залишаються зупиненими; запускати їх слід окремо. До production оновлення треба переконатися, що runtime справді stopped; одночасний ручний start runtime під час installer не підтримується.
+Зупинка runtime завершує всі потоки. Після update ноди потрібно запустити вручну.
 
 ## Приймання лише на Linux
 

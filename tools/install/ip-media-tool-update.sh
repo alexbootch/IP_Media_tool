@@ -19,7 +19,8 @@ while (($#)); do
         --base-only) BASE_ONLY=1; shift ;;
         --help|-h)
             printf '%s\n' 'ip-media-tool-update [--check] [--channel main|stable] [--version vX.Y.Z] [--base-only]' \
-                'Default: current main commit. No Git login or release publication required.'
+                'Default: current main commit. No Git login or release publication required.' \
+                'Application updates stop and restore active services. Running media routes will stop.'
             exit 0 ;;
         *) die "Unknown argument: $1" ;;
     esac

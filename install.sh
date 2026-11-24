@@ -10,8 +10,65 @@ REVISION=
 BASE_ONLY=0
 RESTART_RUNNING=0
 WORK_DIR=
-cleanup() { if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then rm -rf -- "$WORK_DIR"; fi; }
+LINK_TEMP=
+STATE_TEMP=
+ROLLBACK=0
+FILES_CHANGED=0
+POINTER_SWITCHED=0
+ACTIVE_UNITS=()
+MANAGED_FILES=(
+    /etc/systemd/system/ip-media-tool.service
+    /etc/systemd/system/ip-media-tool-runtime.service
+    /usr/local/sbin/ip-media-tool-admin
+    /usr/local/sbin/ip-media-tool-update
+    /var/lib/ip-media-tool/installed-revision
+)
+CURRENT=/opt/ip-media-tool/current
+OLD_LINK=
+cleanup() {
+    local status=$? path saved recovery_failed=0
+    trap - EXIT
+    set +e
+    if ((ROLLBACK)); then
+        printf 'Update failed. Restoring the previous version and service state.\n' >&2
+        if ((POINTER_SWITCHED)); then
+            if ((${#ACTIVE_UNITS[@]})); then
+                systemctl stop "${ACTIVE_UNITS[@]}" || recovery_failed=1
+            fi
+            if [[ -n "$OLD_LINK" ]]; then
+                ln -s -- "$OLD_LINK" "$LINK_TEMP.rollback" && mv -Tf -- "$LINK_TEMP.rollback" "$CURRENT" || recovery_failed=1
+            else
+                rm -f -- "$CURRENT" || recovery_failed=1
+            fi
+        fi
+        if ((FILES_CHANGED)); then
+            for path in "${MANAGED_FILES[@]}"; do
+                saved="$WORK_DIR/previous/${path##*/}"
+                if [[ -e "$saved" || -L "$saved" ]]; then
+                    cp -aT --remove-destination -- "$saved" "$path" || recovery_failed=1
+                else
+                    rm -f -- "$path" || recovery_failed=1
+                fi
+            done
+            systemctl daemon-reload || recovery_failed=1
+        fi
+        if (( ! recovery_failed )); then
+            for path in "${ACTIVE_UNITS[@]}"; do
+                systemctl start "$path" || recovery_failed=1
+            done
+        fi
+        if ((recovery_failed)); then
+            printf 'Automatic recovery was incomplete. Check ip-media-tool and ip-media-tool-runtime in systemctl.\n' >&2
+        fi
+    fi
+    if [[ -n "$LINK_TEMP" ]]; then rm -f -- "$LINK_TEMP" "$LINK_TEMP.rollback"; fi
+    if [[ -n "$STATE_TEMP" ]]; then rm -f -- "$STATE_TEMP"; fi
+    if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then rm -rf -- "$WORK_DIR"; fi
+    exit "$status"
+}
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 while (($#)); do
     case "$1" in
@@ -23,7 +80,7 @@ while (($#)); do
         --help|-h)
             printf '%s\n' 'sudo bash install.sh [--channel main|stable] [--version vX.Y.Z] [--base-only]' \
                 'Installs web UI, system dependencies, ip-media-tool-admin and ip-media-tool-update.' \
-                'Initial service startup is manual; --restart-running restarts an already active service.'
+                'Initial service startup is manual; --restart-running stops and restores active application services.'
             exit 0 ;;
         *) die "Unknown argument: $1" ;;
     esac
@@ -31,9 +88,6 @@ done
 if [[ -n "$REQUESTED_TAG" ]]; then CHANNEL=stable; fi
 [[ "$(uname -s)" == Linux ]] || die 'Run on the Linux server only.'
 ((EUID == 0)) || die 'Run with sudo bash install.sh.'
-if systemctl is-active --quiet ip-media-tool-runtime.service; then
-    die 'Stop worker runtime before installation/update: sudo systemctl stop ip-media-tool-runtime. This stops active routes. Start runtime manually after updating; nodes are never resumed automatically.'
-fi
 # Keep OS variables (notably VERSION) out of the installer argument namespace.
 OS_PROFILE=$(
     source /etc/os-release
@@ -97,8 +151,8 @@ install_command() {
     fi
 }
 install -d -m 0755 /usr/local/sbin
-install_command "$SOURCE/tools/install/ip-media-tool-update.sh" /usr/local/sbin/ip-media-tool-update
 if ((BASE_ONLY)); then
+    install_command "$SOURCE/tools/install/ip-media-tool-update.sh" /usr/local/sbin/ip-media-tool-update
     printf 'Base dependency preparation complete. Web application was not installed.\n'
     exit "$PREREQUISITE_STATUS"
 fi
@@ -131,36 +185,55 @@ if [[ ! -d "$RELEASE_DIR" ]]; then
     chmod -R u=rwX,go=rX "$STAGING"
     mv -- "$STAGING" "$RELEASE_DIR"
 fi
-OLD_CURRENT=$(readlink -f /opt/ip-media-tool/current 2>/dev/null || true)
-WAS_RUNNING=0
-if systemctl is-active --quiet ip-media-tool.service; then WAS_RUNNING=1; fi
-install -m 0644 "$SOURCE/packaging/systemd/ip-media-tool.service" /etc/systemd/system/ip-media-tool.service
-install -m 0644 "$SOURCE/packaging/systemd/ip-media-tool-runtime.service" /etc/systemd/system/ip-media-tool-runtime.service
-install_command "$SOURCE/tools/install/ip-media-tool-admin.sh" /usr/local/sbin/ip-media-tool-admin
-LINK_TEMP="/opt/ip-media-tool/.current.$$"
-ln -s -- "$RELEASE_DIR" "$LINK_TEMP"
-mv -Tf -- "$LINK_TEMP" /opt/ip-media-tool/current
-systemctl daemon-reload
-if ((RESTART_RUNNING && WAS_RUNNING)); then
-    if ! systemctl restart ip-media-tool.service; then
-        if [[ -n "$OLD_CURRENT" && -d "$OLD_CURRENT" ]]; then
-            ln -s -- "$OLD_CURRENT" "$LINK_TEMP"
-            mv -Tf -- "$LINK_TEMP" /opt/ip-media-tool/current
-            systemctl restart ip-media-tool.service || true
-        fi
-        die 'Service restart failed. Previous code pointer was restored when available; inspect journalctl -u ip-media-tool.'
-    fi
+if [[ -L "$CURRENT" ]]; then
+    OLD_LINK=$(readlink -- "$CURRENT")
+elif [[ -e "$CURRENT" ]]; then
+    die "Expected a release symlink at $CURRENT."
 fi
+for unit in ip-media-tool-runtime.service ip-media-tool.service; do
+    if systemctl is-active --quiet "$unit"; then ACTIVE_UNITS+=("$unit"); fi
+done
+if ((${#ACTIVE_UNITS[@]} && ! RESTART_RUNNING)); then
+    die 'Application services are active. Use ip-media-tool-update to stop and restore them.'
+fi
+mkdir "$WORK_DIR/previous"
+for path in "${MANAGED_FILES[@]}"; do
+    if [[ -e "$path" || -L "$path" ]]; then cp -a -- "$path" "$WORK_DIR/previous/"; fi
+done
+LINK_TEMP="/opt/ip-media-tool/.current.$$"
 STATE_TEMP=$(mktemp /var/lib/ip-media-tool/.installed.XXXXXXXX)
 printf '%s\n%s\n' "$REVISION" "$CHANNEL" > "$STATE_TEMP"
 chmod 0644 "$STATE_TEMP"
+ROLLBACK=1
+# Stop the web API before runtime so it cannot submit new worker commands during activation.
+for ((index=${#ACTIVE_UNITS[@]}-1; index>=0; index--)); do
+    printf 'Stopping %s\n' "${ACTIVE_UNITS[index]}"
+    systemctl stop "${ACTIVE_UNITS[index]}" || die "Could not stop ${ACTIVE_UNITS[index]}."
+done
+FILES_CHANGED=1
+install -m 0644 "$SOURCE/packaging/systemd/ip-media-tool.service" /etc/systemd/system/ip-media-tool.service
+install -m 0644 "$SOURCE/packaging/systemd/ip-media-tool-runtime.service" /etc/systemd/system/ip-media-tool-runtime.service
+install_command "$SOURCE/tools/install/ip-media-tool-admin.sh" /usr/local/sbin/ip-media-tool-admin
+install_command "$SOURCE/tools/install/ip-media-tool-update.sh" /usr/local/sbin/ip-media-tool-update
+ln -s -- "$RELEASE_DIR" "$LINK_TEMP"
+POINTER_SWITCHED=1
+mv -Tf -- "$LINK_TEMP" "$CURRENT"
+systemctl daemon-reload
+for unit in "${ACTIVE_UNITS[@]}"; do
+    printf 'Starting %s\n' "$unit"
+    systemctl start "$unit" || die "Could not start $unit."
+done
+for unit in "${ACTIVE_UNITS[@]}"; do
+    systemctl is-active --quiet "$unit" || die "$unit did not stay active."
+done
 mv -f -- "$STATE_TEMP" /var/lib/ip-media-tool/installed-revision
+ROLLBACK=0
 printf '\nIP Media Tool web application installed.\n'
 printf '%s\n' 'First setup: ip-media-tool-admin bootstrap' \
     'Manual start: sudo systemctl start ip-media-tool' \
     'Manual worker runtime: sudo systemctl start ip-media-tool-runtime (does not start nodes)' \
     'Browser: http://SERVER-IP:8080' \
-    'Updates: ip-media-tool-update (main by default; restarts only an already running web service)'
+    'Updates: ip-media-tool-update (main by default; restores previously active services, without starting media routes)'
 if ((PREREQUISITE_STATUS != 0)); then
     printf 'Media prerequisites have unresolved checks (%s); web installation completed independently.\n' "$PREREQUISITE_STATUS" >&2
 fi

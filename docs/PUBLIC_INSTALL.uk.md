@@ -20,7 +20,7 @@ Installer отримує конкретний commit SHA з GitHub API і зав
 ip-media-tool-update
 ```
 
-Default — актуальний commit main після push, без створення release. За потреби запитується локальний sudo password, не GitHub authentication. Уже запущений web service перезапускається в межах ручного update, зупинений залишається зупиненим. Акаунти, сесії та серверні налаштування зберігаються поза code directory.
+За замовчуванням update встановлює актуальний коміт `main` після push. За потреби він запитує пароль локального `sudo`. Після підготовки нової версії updater зупиняє активний вебсервіс, потім активний runtime. Після перемикання версії запускає раніше активні служби у зворотному порядку. Зупинка runtime перериває активні потоки. Ноди запускаються окремо вручну. Акаунти, сесії та серверні налаштування зберігаються поза каталогом коду.
 
 Додаткові режими: --check (лише порівняння SHA), --channel stable, --version vX.Y.Z, --base-only (OS prerequisites/updater без встановлення web app). Stable tag має містити новий application installer; старі prerequisite-only tags не підходять.
 
@@ -28,7 +28,9 @@ Default — актуальний commit main після push, без створ�
 
 Code revisions: /opt/ip-media-tool/releases/<sha>; active pointer: /opt/ip-media-tool/current; встановлений SHA: /var/lib/ip-media-tool/installed-revision. Користувачі: /var/lib/ip-media-tool/security; environment: /etc/ip-media-tool/environment.
 
-Перед перемиканням code pointer перевіряється наявність web packages. Якщо явний restart повертає помилку, installer намагається повернути попередній code pointer. Повні application health checks, config migrations, rollback OS packages і підписані production bundles ще не реалізовані. Локально код не виконувався; runtime приймання проводить користувач на Linux.
+Перед перемиканням перевіряються системні залежності. Якщо активація або запуск служб завершується помилкою, updater намагається повернути попереднє посилання, systemd units, команди та стан служб. Перевірка запуску використовує стан systemd. Приймання застосунку проводиться окремо на Linux.
+
+Якщо термінал був відкритий у каталозі `current` до оновлення, поточний каталог процесу може лишитися прив’язаним до старого коміту. Перед запуском сценарію виконай `cd -P /opt/ip-media-tool/current`.
 
 Main доставка покладається на GitHub HTTPS та контроль commit/push. Source archive не має незалежного підпису. NDI packages і медіаноди ще не готові; web installation незалежна від них. Жодних медіапайплайнів installer не запускає.
 

@@ -39,7 +39,7 @@
 
 ## Етап 2. Каркас системи та керування
 
-Lifecycle 2026-11-23: написано Python node-sdk, inherited-FD worker host, незалежний runtime service, Unix RPC/client, start/stop/status API, deadlines і bounded crash recovery (3 retries). Config mutations координує runtime, активні ноди треба зупинити перед edit/delete. Systemd unit встановлюється без автозапуску, update потребує ручного stop runtime. [Обсяг, обмеження та серверне приймання](WORKER_RUNTIME.uk.md). Регресійні tests написані як source, локально не запускалися. Медіатранспорт/contract routing/secret broker ще не реалізовані.
+Lifecycle 2026-11-23: написано Python node-sdk, inherited-FD worker host, незалежний runtime service, Unix RPC/client, start/stop/status API, deadlines і bounded crash recovery (3 retries). Config mutations координує runtime, активні ноди треба зупинити перед edit/delete. Перший запуск systemd unit ручний. Updater зупиняє й відновлює раніше активні служби. [Обсяг, обмеження та серверне приймання](WORKER_RUNTIME.uk.md). Регресійні тести локально не запускалися. Медіатранспорт і маршрутизацію контрактів додано на етапі 3. Secret broker ще попереду.
 
 - [x] Написати SDK lifecycle, окремий supervisor process, статуси, stop/start cancellation, deadlines і обмежене recovery без autostart.
 - [ ] Прийняти SDK/runtime на Linux: subprocess crash/hang, systemd cleanup, незалежність web, version mismatch і активні config edits.
