@@ -3,8 +3,9 @@
 import asyncio
 import copy
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from converter.config.validation import ConfigError, SchemaRegistry
 from converter.node_sdk.worker import WorkerContext
@@ -143,3 +144,45 @@ class WorkerLifecycleTests(unittest.IsolatedAsyncioTestCase):
         """Refuse an oversize message before sending it to another process."""
         with self.assertRaises(ConfigError):
             encode_frame({"data": "x" * MAX_FRAME})
+
+    async def test_clean_stop_socket_eof_can_precede_process_exit(self):
+        """A stopped worker must get a chance to exit normally after closing IPC."""
+        supervisor = Supervisor(ROOT, None, MemoryStore())
+        socket_closed = asyncio.Event()
+        process = SimpleNamespace(returncode=None)
+        status = self.context.status_snapshot()
+        status["state"] = "stopping"
+        entry = WorkerEntry(config=node_config(), instance_id=INSTANCE_ID, status=status, process=process,
+                            writer=Mock(), desired_running=False, media_changed=asyncio.Event())
+
+        async def clean_eof(entry, reader):
+            """Deliver terminal status and close the stream before the process exit."""
+            entry.status["state"] = "stopped"
+            socket_closed.set()
+            raise asyncio.IncompleteReadError(b"", 4)
+
+        async def exit_after_eof():
+            """Model Python teardown finishing after the IPC close was observed."""
+            await socket_closed.wait()
+            await asyncio.sleep(0.025)
+            if process.returncode is None:
+                process.returncode = 0
+            return process.returncode
+
+        async def terminate_early(child):
+            """Simulate the spurious SIGTERM from the old supervisor."""
+            child.returncode = -15
+
+        async def idle_watchdog(entry):
+            """Leave the shutdown ordering independent of heartbeat deadlines."""
+            await asyncio.Event().wait()
+
+        process.wait = exit_after_eof
+        supervisor._events = clean_eof
+        supervisor._watchdog = idle_watchdog
+        supervisor._signal = Mock()
+        supervisor._terminate = AsyncMock(side_effect=terminate_early)
+        await asyncio.wait_for(supervisor._watch(entry, None), 1)
+        supervisor._terminate.assert_not_awaited()
+        self.assertEqual(entry.status["state"], "stopped")
+        self.assertEqual(entry.last_exit_code, 0)

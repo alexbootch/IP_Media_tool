@@ -25,6 +25,7 @@ RETRY_LIMIT = 3
 HEARTBEAT_TIMEOUT = 15
 START_TIMEOUT = 30
 STOP_TIMEOUT = 8
+EXIT_GRACE = 2
 LOGGER = logging.getLogger("ip-media-tool.runtime")
 
 
@@ -420,12 +421,25 @@ class Supervisor:
         try:
             done, _ = await asyncio.wait([events, exited, watchdog, sender], return_when=asyncio.FIRST_COMPLETED)
             if exited not in done:
-                try:
-                    for task in done:
-                        task.result()
-                except Exception as error:
-                    entry.failure_reason = "timeout" if isinstance(error, TimeoutError) else "pipeline_error"
-                await self._terminate(entry.process)
+                failures = [task.exception() for task in done]
+                eof = failures[0] if done == {events} else None
+                clean_stop = (
+                    not entry.desired_running
+                    and entry.status["state"] == "stopped"
+                    and isinstance(eof, asyncio.IncompleteReadError)
+                    and eof.expected == 4
+                    and not eof.partial
+                )
+                if clean_stop:
+                    # SDK closes the socket after publishing stopped, just before Python exits.
+                    try:
+                        await asyncio.wait_for(asyncio.shield(exited), EXIT_GRACE)
+                    except TimeoutError:
+                        entry.failure_reason = "timeout"
+                if not exited.done():
+                    if entry.failure_reason is None and not clean_stop and any(failures):
+                        entry.failure_reason = "timeout" if any(isinstance(error, TimeoutError) for error in failures) else "pipeline_error"
+                    await self._terminate(entry.process)
             await exited
         finally:
             self._revoke_media(entry)
