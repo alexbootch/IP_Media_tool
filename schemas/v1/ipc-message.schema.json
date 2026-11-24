@@ -10,10 +10,20 @@
     "request_id": { "anyOf": [{ "type": "null" }, { "$ref": "common.schema.json#/$defs/uuid" }] },
     "node_id": { "$ref": "common.schema.json#/$defs/uuid" },
     "instance_id": { "$ref": "common.schema.json#/$defs/uuid" },
-    "kind": { "enum": ["command", "ack", "status", "contract", "contract_withdrawn", "error"] },
+    "kind": { "enum": ["command", "ack", "status", "contract", "contract_withdrawn", "media_subscription", "error"] },
     "payload": { "type": "object" }
   },
   "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "media_subscription" } } },
+      "then": { "properties": { "payload": {
+        "type": "object", "additionalProperties": false, "required": ["local_port_id", "contract"],
+        "properties": {
+          "local_port_id": { "$ref": "common.schema.json#/$defs/identifier" },
+          "contract": { "anyOf": [{ "type": "null" }, { "$ref": "media-contract.schema.json" }] }
+        }
+      } } }
+    },
     {
       "if": { "properties": { "kind": { "const": "status" } } },
       "then": { "properties": { "payload": { "$ref": "node-status.schema.json" } } }
@@ -27,7 +37,7 @@
       "then": { "properties": { "payload": { "$ref": "common.schema.json#/$defs/error" } } }
     },
     {
-      "if": { "properties": { "kind": { "enum": ["command", "ack", "error"] } } },
+      "if": { "properties": { "kind": { "enum": ["command", "ack", "error", "contract", "contract_withdrawn"] } } },
       "then": { "properties": { "request_id": { "$ref": "common.schema.json#/$defs/uuid" } } }
     },
     {

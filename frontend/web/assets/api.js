@@ -1,10 +1,10 @@
-export async function api(path, { method = "GET", body, csrf, redirect = true } = {}) {
+export async function api(path, { method = "GET", body, csrf, redirect = true, signal } = {}) {
   const headers = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (csrf) headers["X-CSRF-Token"] = csrf;
   let response;
   try {
-    response = await fetch(path, { method, headers, credentials: "same-origin", body: body === undefined ? undefined : JSON.stringify(body) });
+    response = await fetch(path, { method, headers, credentials: "same-origin", signal, body: body === undefined ? undefined : JSON.stringify(body) });
   } catch {
     throw new Error("Сервер недоступний. Перевірте з’єднання та повторіть дію.");
   }
@@ -12,7 +12,7 @@ export async function api(path, { method = "GET", body, csrf, redirect = true } 
   if (!response.ok) {
     if (response.status === 401 && redirect) window.location.assign("/login");
     const message = typeof result.detail === "string" ? result.detail : "Не вдалося виконати дію. Перевірте введені дані.";
-    throw new Error(message);
+    throw Object.assign(new Error(message), { status: response.status, code: result.code, issues: result.issues });
   }
   return result;
 }

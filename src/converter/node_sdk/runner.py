@@ -13,6 +13,7 @@ import socket
 
 from converter.config.modules import ModuleRegistry
 from converter.config.validation import ConfigError, SchemaRegistry, canonical_id
+from converter.node_sdk.media import GenerationRetired
 from converter.node_sdk.worker import NodeWorker, WorkerContext
 from converter.runtime.protocol import peer_credentials, read_frame
 
@@ -34,14 +35,29 @@ async def heartbeat(worker, context):
         await context.publish_status(await asyncio.wait_for(worker.get_status(), 3))
 
 
-async def commands(reader, worker, context):
+async def commands(reader, worker, context, subscriptions, changed):
     """Handle bounded, validated session commands; duplicate requests never rerun work."""
     seen = deque(maxlen=128)
     while not context.cancelled.is_set():
         message = await read_frame(reader, timeout=None)
         context.schemas.validate("ipc-message", message)
-        if message["node_id"] != context.node_id or message["instance_id"] != context.instance_id or message["kind"] != "command":
+        if message["node_id"] != context.node_id or message["instance_id"] != context.instance_id:
             raise ConfigError("invalid_message", "Worker session mismatch.")
+        if message["kind"] == "ack":
+            context.acknowledge_media(message["request_id"])
+            continue
+        if message["kind"] == "media_subscription":
+            payload = message["payload"]
+            local = payload["local_port_id"]
+            connection = context.config["connections"].get(local)
+            contract = payload["contract"]
+            if connection is None or (contract is not None and any(contract[key] != connection[key] for key in ("source_node_id", "source_port_id"))):
+                raise ConfigError("invalid_config", "Contract does not match the input connection.")
+            subscriptions[local] = contract
+            changed.set()
+            continue
+        if message["kind"] != "command":
+            raise ConfigError("invalid_config", "Unsupported runtime message.")
         request_id = message["request_id"]
         command = message["payload"]["command"]
         if message["payload"]["config_revision"] != context.config["revision"]:
@@ -57,6 +73,32 @@ async def commands(reader, worker, context):
         if command in {"get_status", "resync"}:
             await context.publish_status(await asyncio.wait_for(worker.get_status(), 3))
         # start is idempotent: the explicit supervisor spawn/bootstrap starts once.
+
+
+async def deliver_contracts(startup, worker, subscriptions, changed):
+    """Apply the newest input snapshots only after plugin initialization completes."""
+    await asyncio.shield(startup)
+    applied = {}
+    while True:
+        await changed.wait()
+        changed.clear()
+        while subscriptions:
+            local = next(iter(subscriptions))
+            contract = subscriptions.pop(local)
+            previous = applied.get(local)
+            if contract is not None and previous is not None and contract["instance_id"] == previous["instance_id"] and contract["contract_revision"] <= previous["contract_revision"]:
+                continue
+            if local in applied and contract is None and previous is None:
+                continue
+            try:
+                await asyncio.wait_for(worker.on_contract(local, contract), 5)
+                applied[local] = contract
+            except GenerationRetired:
+                if contract is None:
+                    raise
+                # An intermediate generation can retire before the reader opens it.
+                await asyncio.wait_for(worker.on_contract(local, None), 5)
+                applied[local] = None
 
 
 def load_worker(root, node_type):
@@ -109,6 +151,7 @@ async def run(descriptor):
         modules.scan()
         modules.validate_config(bootstrap["config"])
         context = WorkerContext(bootstrap["config"], bootstrap["instance_id"], bootstrap["leases"], writer, schemas)
+        context.media_root = Path(bootstrap["media_root"])
         context.ports = modules.get(context.config["type"])["manifest"]["ports"]
         loop = asyncio.get_running_loop()
         loop.add_signal_handler(signal.SIGTERM, context.cancelled.set)
@@ -117,12 +160,14 @@ async def run(descriptor):
         worker = load_worker(root, context.config["type"])(context)
         startup = asyncio.create_task(initialize_worker(worker, context))
         beat = asyncio.create_task(heartbeat(worker, context))
-        command_task = asyncio.create_task(commands(reader, worker, context))
+        subscriptions, changed = {}, asyncio.Event()
+        command_task = asyncio.create_task(commands(reader, worker, context, subscriptions, changed))
+        delivery = asyncio.create_task(deliver_contracts(startup, worker, subscriptions, changed))
         stopped = asyncio.create_task(context.cancelled.wait())
-        tasks = [startup, beat, command_task, stopped]
+        tasks = [startup, beat, command_task, delivery, stopped]
         while True:
             done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            if stopped in done:
+            if context.cancelled.is_set():
                 break
             for task in done:
                 task.result()
@@ -158,6 +203,8 @@ async def run(descriptor):
                     await context.set_state("stopped")
             except Exception:
                 exit_code = 1
+        if context is not None:
+            context.close_media()
         writer.close()
         try:
             await asyncio.wait_for(writer.wait_closed(), 1)

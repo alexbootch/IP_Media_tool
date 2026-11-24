@@ -1,4 +1,4 @@
-"""Shared status lifecycle and explicit unsupported transport/secret operations."""
+"""Shared status lifecycle and worker-owned SHM generations."""
 
 from abc import ABC, abstractmethod
 import asyncio
@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 import json
 import logging
 from types import MappingProxyType
+from uuid import uuid4
 
 from converter.config.validation import ConfigError
+from converter.node_sdk.media import ShmGeneration, ShmReader
 from converter.runtime.protocol import MAX_STATUS, encode_frame, envelope, write_frame
 
 
@@ -57,6 +59,12 @@ class WorkerContext:
         self.logger = NodeLogger(self.node_id, config["type"], instance_id)
         self.writer, self.schemas = writer, schemas
         self._write_lock = asyncio.Lock()
+        self.media_root = None
+        self.generations = {}
+        self.live_generations = {}
+        self.contract_revisions = {}
+        self._media_lock = asyncio.Lock()
+        self._media_acks = {}
         self._status = {"schema_version": 1, "node_id": self.node_id, "node_type": config["type"], "instance_id": instance_id, "config_revision": config["revision"], "status_revision": 1, "state": "stopped", "updated_at": utc_now(), "error": None, "metrics": {}}
 
     @property
@@ -72,14 +80,16 @@ class WorkerContext:
         """Validate identity, revision and state before publishing a new snapshot."""
         async with self._write_lock:
             status = copy.deepcopy(status)
+            if status.get("status_revision", 0) < self._status["status_revision"]:
+                return
             for key in ("node_id", "node_type", "instance_id", "config_revision"):
                 if status.get(key) != self._status[key]:
                     raise ConfigError("invalid_status", "Worker status identity is immutable.")
             previous, state = self._status["state"], status.get("state")
             if state != previous and state not in TRANSITIONS.get(previous, set()):
                 raise ConfigError("invalid_status", "Invalid worker state transition.")
-            if state == "running" and any(port["direction"] == "output" and port["required"] for port in getattr(self, "ports", [])):
-                raise ConfigError("dependency_unavailable", "Required media publication is unavailable until transport validation is implemented.")
+            if state == "running" and previous != "running" and any(port["direction"] == "output" and port["required"] and port["id"] not in self.live_generations for port in getattr(self, "ports", [])):
+                raise ConfigError("transport_error", "Required output has no published SHM generation.")
             status.update(status_revision=self._status["status_revision"] + 1, updated_at=utc_now())
             self.schemas.validate("node-status", status)
             if len(encode_frame(status)) > MAX_STATUS:
@@ -100,13 +110,73 @@ class WorkerContext:
         async with self._write_lock:
             await write_frame(self.writer, envelope(self.node_id, self.instance_id, kind, payload, request_id))
 
+    def create_shm_generation(self, source_port_id, *, video, audio, buffers):
+        """Allocate rings for an output port using actual negotiated stream metadata."""
+        if self.media_root is None or self.cancelled.is_set() or not any(port["id"] == source_port_id and port["direction"] == "output" for port in self.ports):
+            raise ConfigError("invalid_config", "SHM generation requires a declared output port.")
+        if len(self.generations) >= 64 or sum(item.port_id == source_port_id for item in self.generations.values()) >= 2:
+            raise ConfigError("transport_error", "Close unused generations before allocating new rings.")
+        generation = ShmGeneration(self, source_port_id, video, audio, buffers)
+        self.generations[generation.generation] = generation
+        return generation
+
+    def open_shm(self, contract):
+        """Open independent read-only cursors for a received SHM contract."""
+        return ShmReader(self, contract)
+
     async def publish_contract(self, source_port_id, contract):
-        """Fail closed until a verified SHM transport and descriptor validator exist."""
-        raise ConfigError("dependency_unavailable", "Media transport publication is not implemented.")
+        """Commit a newly allocated generation and retire the preceding one."""
+        async with self._media_lock:
+            generation = self.generations.get(contract.get("transport_generation"))
+            if self.cancelled.is_set() or generation is None or generation.closed or generation.published or generation.port_id != source_port_id or contract != generation._contract:
+                raise ConfigError("transport_error", "Publication requires an owned, unpublished SHM generation.")
+            revision = self.contract_revisions.get(source_port_id, 0) + 1
+            payload = {**generation._contract, "contract_revision": revision}
+            await self._send_media("contract", payload)
+            old = self.live_generations.get(source_port_id)
+            self.live_generations[source_port_id] = generation
+            self.contract_revisions[source_port_id] = revision
+            generation.published = True
+            if old is not None:
+                old._close()
 
     async def withdraw_contract(self, source_port_id, reason):
-        """Reject transport operations rather than pretending to revoke live buffers."""
-        raise ConfigError("dependency_unavailable", "Media transport withdrawal is not implemented.")
+        """Withdraw the current generation and free this producer's mappings."""
+        async with self._media_lock:
+            generation = self.live_generations.get(source_port_id)
+            if generation is None:
+                return
+            revision = self.contract_revisions[source_port_id] + 1
+            fields = {key: generation._contract[key] for key in ("source_node_id", "source_port_id", "instance_id", "transport_generation")}
+            payload = {**fields, "contract_revision": revision, "reason": reason}
+            self.schemas.validate("ipc-message", envelope(self.node_id, self.instance_id, "contract_withdrawn", payload))
+            await self._send_media("contract_withdrawn", payload)
+            self.contract_revisions[source_port_id] = revision
+            self.live_generations.pop(source_port_id)
+            generation._close()
+
+    async def _send_media(self, kind, payload):
+        """Keep files live until runtime acknowledges ownership and registration."""
+        request_id = str(uuid4())
+        reply = asyncio.get_running_loop().create_future()
+        self._media_acks[request_id] = reply
+        try:
+            await self.send(kind, payload, request_id)
+            await asyncio.wait_for(reply, 5)
+        finally:
+            self._media_acks.pop(request_id, None)
+
+    def acknowledge_media(self, request_id):
+        """Resolve only a pending publication on this authenticated worker channel."""
+        reply = self._media_acks.get(request_id)
+        if reply is not None and not reply.done():
+            reply.set_result(None)
+
+    def close_media(self):
+        """Drop local producer allocations even when the control channel is broken."""
+        for generation in list(self.generations.values()):
+            generation._close()
+        self.live_generations.clear()
 
     async def get_secret(self, secret_ref):
         """Expose no credentials until the scoped secret broker is implemented."""

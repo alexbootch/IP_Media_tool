@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import signal
 import stat
+import tempfile
 
 from converter.config.modules import ModuleRegistry
 from converter.config.store import NodeConfigStore
@@ -79,7 +80,7 @@ async def serve():
         raise RuntimeError("Runtime socket directory must not be a symlink")
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock = os.open(path.parent / ".runtime.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    server, supervisor, endpoint = None, None, None
+    server, supervisor, endpoint, media = None, None, None, None
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if path.exists() or path.is_symlink():
@@ -92,7 +93,8 @@ async def serve():
         modules.scan()
         nodes = NodeConfigStore(os.environ.get("IP_MEDIA_TOOL_NODE_DIR", "/etc/ip-media-tool/nodes"), modules)
         nodes.initialize()
-        supervisor = Supervisor(root, modules, nodes)
+        media = tempfile.TemporaryDirectory(prefix="media-", dir=path.parent)
+        supervisor = Supervisor(root, modules, nodes, media.name)
         endpoint = RuntimeServer(supervisor)
         server = await asyncio.start_unix_server(endpoint.handle, path=path, limit=65540, backlog=32)
         os.chmod(path, 0o600)
@@ -114,14 +116,17 @@ async def serve():
             supervisor.closing = True
         if server is not None:
             server.close()
-            await server.wait_closed()
         if endpoint is not None:
             handlers = list(endpoint.handlers)
             for task in handlers:
                 task.cancel()
             await asyncio.gather(*handlers, return_exceptions=True)
+        if server is not None:
+            await server.wait_closed()
         if supervisor is not None:
             await supervisor.close()
+        if media is not None:
+            media.cleanup()
         if server is not None and path.exists() and stat.S_ISSOCK(path.lstat().st_mode):
             path.unlink()
         os.close(lock)

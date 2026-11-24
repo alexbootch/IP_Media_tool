@@ -50,7 +50,7 @@ UI одержує config/status/capabilities через API оболонки. В
 
 SDK забезпечує структурні повідомлення IPC, status, logging, contract subscription, timeout/cancellation і cleanup. Worker визначає протокольні параметри, GStreamer pipeline і реакцію на втрату сигналу. Зміна config v1 застосовується контрольованим restart лише відповідної ноди; довільний hot reload не входить у v1. Новий worker отримує новий `instance_id`.
 
-Стан реалізації lifecycle 2026-11-23: [WORKER_RUNTIME](WORKER_RUNTIME.uk.md). Реалізовані процеси, status IPC, cancellation, bounded recovery і DeckLink leases. Contract subscription/transport та secrets поки fail-closed. Редагування активної ноди відхиляється до її ручного stop; автоматичний stop/restart при save не виконується. Detached subprocesses ноди заборонені: helpers мають залишатися у worker process group.
+Стан реалізації lifecycle: [WORKER_RUNTIME](WORKER_RUNTIME.uk.md). Процеси, status IPC, cancellation, bounded recovery та DeckLink leases доповнено [SHM і підпискою на контракти](SHM_TRANSPORT.uk.md). Секретний broker ще попереду. Редагування активної ноди відхиляється до її ручного stop; автоматичний stop/restart при save не виконується. Detached subprocesses ноди заборонені: helpers мають залишатися у worker process group.
 
 Reserve/release hardware виконує runtime перед використанням; worker не обирає «перший вільний» порт замість налаштованого persistent ID. Device-number повторно звіряється з ID перед запуском. Зміна board profile не виконується автоматично під маршрутами. Після аварії ОС звільняє handles, а runtime перевіряє/звільняє власні leases; не можна видаляти SHM або сокети інших нод.
 

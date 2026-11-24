@@ -50,7 +50,7 @@ Manifest може містити resource_bindings: provider=decklink, setting=<
 
 Один DeckLink persistent endpoint резервується виключно за однією нодою незалежно від напрямку; два незалежні порти різних ID можуть використовуватися різними workers. Запит одного endpoint двічі одним worker відхиляється: full-duplex не припускається. Бронювання контролює лише cooperating workers цього runtime. Вільний lease не доводить відсутність зовнішнього процесу; реальний pipeline має звірити device-number/ID і помилки драйвера перед використанням.
 
-GPU capacity, інші capability readiness providers, секретний broker і SHM transport не підмінені фіктивним успіхом. Обов’язкові непідтверджені capabilities та secret_refs блокують start. Consumers із media connections поки не запускаються: subscription/resync/generation switch буде реалізований із транспортом. publish_contract/withdraw_contract/get_secret явно повертають dependency_unavailable. Producer з required output не може оголосити running до реалізації перевіреної media publication. on_contract API збережено для наступного етапу, але медіаподії поки не маршрутизуються.
+Runtime маршрутизує контракти SHM та надсилає відкликання споживачам. Споживач із валідним з’єднанням може запуститися до джерела й чекати на `on_contract`. [Опис SHM та ручна перевірка](SHM_TRANSPORT.uk.md). Обов’язкові непідтверджені capabilities та secret_refs блокують start. GPU capacity, додаткові readiness providers і secret broker залишаються окремими задачами.
 
 ## Конфіги під керуванням runtime
 

@@ -51,7 +51,8 @@ Lifecycle 2026-11-23: написано Python node-sdk, inherited-FD worker host
 - [ ] node-sdk і plugin manifest: ports, config schema, worker entry point, UI entry point, capabilities requirements.
 - [ ] Control/runtime separation, Unix socket IPC, lifecycle, readiness, bounded restart policy, resource ownership.
 - [ ] systemd units та перевірка service lifecycle із тестовими воркерами без медіапайплайнів.
-- [ ] Браузерний граф, налаштування й актуальні стани через events; lifecycle перевіряється mock workers без GStreamer/SHM.
+- [x] Написати браузерний редактор графа: створення нод із реєстру, переміщення, з’єднання портів, збереження конфігів, ручний запуск/зупинка та опитування статусів. [Робочий простір і серверне приймання](GRAPH_EDITOR.uk.md).
+- [ ] Підтвердити graph UI та lifecycle на Linux із зареєстрованими модулями. Поточний UI читає статуси опитуванням, підписку на події залишено на майбутнє.
 - [ ] Bootstrap admin, login/logout, захищені сесії, viewer/operator/admin, audit, secret references і log rotation.
 
 Умова завершення: користувач після входу створює та з'єднує ноди, зберігає граф у їхніх конфігах і керує mock workers. Конфіги та бажаний стан відновлюються після перезапуску. Каркас ще не доводить працездатність медіатракту.
@@ -61,7 +62,8 @@ Lifecycle 2026-11-23: написано Python node-sdk, inherited-FD worker host
 Починається після завершення схем і каркаса системи. Досліди виконуються в окремому Linux test environment з визначеним каталогом за межами дерева вихідного коду. Тимчасові pipelines та сторонні SDK builds не розміщуються у корені проєкту чи production-модулях.
 
 - [ ] Перевірити Linux NDI runtime/plugin, спільний пошук mDNS + Discovery Server, groups та ізоляцію worker contexts за сценаріями етапу 0.
-- [ ] Реалізувати SHM transport через визначений інтерфейс node-sdk: test input -> два незалежних test outputs.
+- [x] Додати SHM-контракти, `mmap`-кільця, fan-out та ізольований Linux-сценарій: джерело → два незалежні виходи. [SHM і приймання](SHM_TRANSPORT.uk.md).
+- [ ] Виконати сценарій на Linux і зафіксувати результат до приймання транспорту.
 - [ ] Перевірити caps, timestamps/SEGMENT/discontinuity, clock/base-time mapping, A/V drift і затримку.
 - [ ] Перевірити late join, повільного consumer, full SHM, disconnect, producer restart і format change.
 - [ ] Обрати транспортну реалізацію за результатами metadata correctness, copies, RAM bandwidth і fan-out; визначити формат audio banks.

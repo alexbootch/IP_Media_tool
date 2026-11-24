@@ -3,11 +3,12 @@
   "title": "Private inherited worker channel bootstrap v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "config", "instance_id", "leases"],
+  "required": ["schema_version", "config", "instance_id", "leases", "media_root"],
   "properties": {
     "schema_version": { "const": 1 },
     "config": { "$ref": "node-config.schema.json" },
     "instance_id": { "$ref": "common.schema.json#/$defs/uuid" },
+    "media_root": { "type": "string", "minLength": 1, "maxLength": 512 },
     "leases": {
       "type": "array",
       "maxItems": 64,

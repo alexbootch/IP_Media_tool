@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Робочий простір · IP Media Tool</title>
   <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/graph.css">
   <script type="module" src="/assets/app.js"></script>
 </head>
 <body class="workspace-page">
@@ -45,8 +46,28 @@
       </header>
       <main class="main-content" id="main-content" aria-busy="true">
         <section id="workspace-view">
-          <div class="page-heading"><div><span class="eyebrow">ВАША СИСТЕМА</span><h1>Робочий простір</h1><p class="muted">Керуйте медіамаршрутами в одному просторі.</p></div><span class="pill">Початкове налаштування</span></div>
-          <div class="workspace-canvas"><div class="empty-workspace"><div class="empty-icon" aria-hidden="true">▦</div><h2>Простір для ваших потоків</h2><p>Вхід і керування доступом уже доступні.<br>Медіамаршрути ще не налаштовані.</p><span class="muted small-text">Граф нод з’явиться на наступному етапі.</span></div></div>
+          <div class="page-heading"><h1>Робочий простір</h1></div>
+          <div class="node-graph" id="node-graph">
+            <div class="graph-toolbar">
+              <button type="button" class="button primary" id="graph-add" hidden>＋ Додати ноду</button>
+              <button type="button" class="button subtle" id="graph-reload">Оновити</button>
+              <button type="button" class="button subtle" id="graph-cancel-edge" hidden>Скасувати з’єднання</button>
+              <span id="graph-runtime" class="muted small-text" role="status"></span>
+            </div>
+            <p id="graph-notice" class="graph-notice small-text" role="status" hidden></p>
+            <p id="graph-error" class="graph-notice form-error" role="alert" hidden></p>
+            <div class="graph-viewport" id="graph-viewport" tabindex="0" aria-label="Граф нод">
+              <div class="graph-plane" id="graph-plane">
+                <svg class="graph-edges" id="graph-edges" aria-hidden="true"></svg>
+                <div id="graph-nodes"></div>
+                <p id="graph-empty" class="graph-empty muted">Завантаження графа…</p>
+              </div>
+            </div>
+            <details class="graph-diagnostics" id="graph-diagnostics" hidden>
+              <summary>Діагностика графа <span id="graph-diagnostics-count"></span></summary>
+              <ul id="graph-diagnostics-items"></ul>
+            </details>
+          </div>
         </section>
         <section id="users-view" hidden>
           <div class="page-heading"><div><span class="eyebrow">АДМІНІСТРУВАННЯ</span><h1>Користувачі <span id="user-count" class="count-badge">0</span></h1><p class="muted">Облікові записи та права доступу до системи.</p></div><button id="add-user-button" type="button" class="button primary">＋ Додати користувача</button></div>
@@ -57,6 +78,24 @@
     </div>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="graph-dialog" aria-labelledby="graph-dialog-title">
+    <form id="graph-form">
+      <div class="dialog-heading"><h2 id="graph-dialog-title">Нода</h2></div>
+      <label id="graph-type-label" for="graph-type">Тип ноди</label><select id="graph-type"></select>
+      <label for="graph-name">Назва</label><input id="graph-name" maxlength="100" required>
+      <label class="checkbox-label"><input type="checkbox" id="graph-enabled">Дозволити ручний запуск</label>
+      <div class="graph-position-fields">
+        <label for="graph-x">Координата X<input type="number" id="graph-x" step="any" required></label>
+        <label for="graph-y">Координата Y<input type="number" id="graph-y" step="any" required></label>
+      </div>
+      <div id="graph-connections"></div>
+      <label for="graph-settings">Параметри модуля (JSON)</label>
+      <textarea id="graph-settings" rows="6" spellcheck="false" aria-describedby="graph-settings-help"></textarea>
+      <p class="field-help" id="graph-settings-help">Використовуй поля зі схеми модуля. Паролі й токени сюди не вводь.</p>
+      <p class="form-error" id="graph-form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button subtle" id="graph-dialog-close">Закрити</button><button type="submit" class="button primary" id="graph-save">Зберегти</button></div>
+    </form>
+  </dialog>
   <dialog id="user-dialog"><form id="user-form"><div class="dialog-heading"><div><span class="eyebrow">ОБЛІКОВИЙ ЗАПИС</span><h2 id="user-dialog-title">Новий користувач</h2></div><button class="icon-button" type="button" data-close aria-label="Закрити">×</button></div><label for="user-name">Ім’я</label><input id="user-name" name="display_name" maxlength="80" required><label for="user-login">Логін</label><input id="user-login" name="username" minlength="3" maxlength="32" pattern="[a-z0-9][a-z0-9_.\-]{2,31}" autocomplete="off" required><label for="user-role">Роль</label><select id="user-role" name="role"><option value="viewer">Перегляд</option><option value="operator">Оператор</option><option value="admin">Адміністратор</option></select><div id="new-password-group"><label for="user-password">Початковий пароль</label><input id="user-password" name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password"><p class="field-help">Від 12 до 128 символів.</p></div><label class="checkbox-label" id="user-enabled-group"><input type="checkbox" id="user-enabled" name="enabled">Обліковий запис активний</label><p class="form-error" data-error role="alert" hidden></p><div class="dialog-actions"><button class="button subtle" type="button" data-close>Скасувати</button><button class="button primary" type="submit">Зберегти</button></div></form></dialog>
   <dialog id="password-dialog"><form id="password-form"><div class="dialog-heading"><div><span class="eyebrow">БЕЗПЕКА</span><h2 id="password-title">Змінити пароль</h2></div><button class="icon-button" type="button" data-close aria-label="Закрити">×</button></div><p id="password-description" class="muted"></p><div id="current-password-group"><label for="current-password">Поточний пароль</label><input id="current-password" type="password" autocomplete="current-password" maxlength="128"></div><label for="new-password">Новий пароль</label><input id="new-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><label for="confirm-password">Повторіть новий пароль</label><input id="confirm-password" type="password" minlength="12" maxlength="128" autocomplete="new-password" required><p class="field-help">Усі попередні сесії цього користувача буде завершено.</p><p class="form-error" data-error role="alert" hidden></p><div class="dialog-actions"><button class="button subtle" type="button" data-close>Скасувати</button><button class="button primary" type="submit">Змінити пароль</button></div></form></dialog>
   <dialog id="delete-dialog"><form id="delete-form"><div class="dialog-heading"><h2>Видалити користувача?</h2><button class="icon-button" type="button" data-close aria-label="Закрити">×</button></div><p id="delete-description" class="muted"></p><p class="form-error" data-error role="alert" hidden></p><div class="dialog-actions"><button class="button subtle" type="button" data-close>Скасувати</button><button class="button danger" type="submit">Видалити</button></div></form></dialog>

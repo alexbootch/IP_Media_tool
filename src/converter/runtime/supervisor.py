@@ -8,6 +8,7 @@ import logging
 import os
 from pathlib import Path
 import signal
+import shutil
 import socket
 import sys
 import tempfile
@@ -16,6 +17,7 @@ from uuid import uuid4
 
 from converter.config.validation import ConfigError, canonical_id, decode_json
 from converter.node_sdk.worker import TRANSITIONS, utc_now
+from converter.node_sdk.media import validate_contract
 from converter.runtime.protocol import MAX_STATUS, encode_frame, envelope, read_frame, write_frame
 
 
@@ -45,12 +47,15 @@ class WorkerEntry:
     leases: list = field(default_factory=list)
     last_exit_code: int | None = None
     failure_reason: str | None = None
+    media_pending: dict = field(default_factory=dict)
+    media_changed: object = None
+    contract_revisions: dict = field(default_factory=dict)
 
 
 class Supervisor:
     """Own all starts/stops/config mutations; never restore desired-running at boot."""
 
-    def __init__(self, root, modules, nodes):
+    def __init__(self, root, modules, nodes, media_root=None):
         """Bind this daemon to one immutable release and the shared config store."""
         self.root, self.modules, self.nodes = Path(root).resolve(), modules, nodes
         self.entries = {}
@@ -58,6 +63,8 @@ class Supervisor:
         self.control_locks = {}
         self.launch_tasks = {}
         self.closing = False
+        self.media_root = Path(media_root) if media_root is not None else None
+        self.contracts = {}
 
     def snapshot(self, node_id=None):
         """Report absent workers as stopped without inventing an instance UUID."""
@@ -182,8 +189,6 @@ class Supervisor:
         relevant = self.modules.validate_graph(related)
         if relevant:
             raise ConfigError("invalid_config", "Node graph is not ready to start.", issues=relevant)
-        if config["connections"]:
-            raise ConfigError("dependency_unavailable", "Consumer media transport is not implemented; no worker was started.", 409)
         manifest = self.modules.get(config["type"])["manifest"]
         if config["secret_refs"]:
             raise ConfigError("dependency_unavailable", "Scoped worker secret broker is not implemented.", 409)
@@ -253,15 +258,20 @@ class Supervisor:
         entry.last_worker_revision = 0
         entry.spawned_at = entry.last_seen = time.monotonic()
         entry.failure_reason = None
+        entry.media_pending.clear()
+        entry.media_changed = asyncio.Event()
+        entry.contract_revisions.clear()
         entry.status = {"schema_version": 1, "node_id": entry.config["id"], "node_type": entry.config["type"], "instance_id": entry.instance_id, "config_revision": entry.config["revision"], "status_revision": 1, "state": "starting", "updated_at": utc_now(), "error": None, "metrics": {}}
         try:
+            (self.media_root / entry.instance_id).mkdir(mode=0o700)
             entry.process = await asyncio.create_subprocess_exec(sys.executable, "-m", "converter.node_sdk.runner", "--ipc-fd", str(child.fileno()), pass_fds=(child.fileno(),), env=self._environment(), cwd=self.root, stdin=asyncio.subprocess.DEVNULL, start_new_session=True)
             child.close()
             reader, entry.writer = await asyncio.open_connection(sock=parent)
-            bootstrap = {"schema_version": 1, "config": entry.config, "instance_id": entry.instance_id, "leases": entry.leases}
+            bootstrap = {"schema_version": 1, "config": entry.config, "instance_id": entry.instance_id, "leases": entry.leases, "media_root": str(self.media_root)}
             self.modules.schemas.validate("worker-bootstrap", bootstrap)
             await write_frame(entry.writer, bootstrap)
             await self._command(entry, "start")
+            self._seed_subscriptions(entry)
             entry.watcher = asyncio.create_task(self._watch(entry, reader))
             self._log(entry, "worker.spawned")
         except BaseException:
@@ -273,11 +283,88 @@ class Supervisor:
                 self._signal(entry.process, signal.SIGKILL)
                 await entry.process.wait()
                 entry.process = None
+            self._cleanup_media(entry)
             raise
+
+    def _queue_media(self, entry, local, contract):
+        """Coalesce updates per input and wake only the affected consumer sender."""
+        entry.media_pending[local] = contract
+        entry.media_changed.set()
+
+    def _seed_subscriptions(self, entry):
+        """Populate the current snapshot for late joins and explicit resync."""
+        for local, connection in entry.config["connections"].items():
+            source = (connection["source_node_id"], connection["source_port_id"])
+            self._queue_media(entry, local, self.contracts.get(source))
+
+    def _fan_out(self, source, contract):
+        """Publish a snapshot to matching configured edges without waiting on consumers."""
+        for entry in self.entries.values():
+            if entry.process is None or not entry.desired_running:
+                continue
+            for local, connection in entry.config["connections"].items():
+                if source == (connection["source_node_id"], connection["source_port_id"]):
+                    self._queue_media(entry, local, contract)
+
+    def _revoke_media(self, entry):
+        """Invalidate every live output of this exact producer instance."""
+        for key, contract in list(self.contracts.items()):
+            if contract["instance_id"] == entry.instance_id:
+                del self.contracts[key]
+                self._fan_out(key, None)
+
+    def _cleanup_media(self, entry):
+        """Delete only the runtime-created directory of a reaped worker instance."""
+        if self.media_root is not None and entry.instance_id:
+            canonical_id(entry.instance_id)
+            shutil.rmtree(self.media_root / entry.instance_id, ignore_errors=True)
+
+    async def _send_subscriptions(self, entry):
+        """Deliver ordered changes per consumer with independent IPC deadlines."""
+        while True:
+            await entry.media_changed.wait()
+            entry.media_changed.clear()
+            while entry.media_pending:
+                local = next(iter(entry.media_pending))
+                contract = entry.media_pending.pop(local)
+                message = envelope(entry.config["id"], entry.instance_id, "media_subscription", {"local_port_id": local, "contract": contract})
+                await write_frame(entry.writer, message)
+
+    async def _media_event(self, entry, message):
+        """Register or withdraw a validated generation from its owning worker only."""
+        payload = message["payload"]
+        node_id, port_id = payload["source_node_id"], payload["source_port_id"]
+        manifest = self.modules.get(entry.config["type"])["manifest"]
+        if node_id != entry.config["id"] or payload["instance_id"] != entry.instance_id or not any(port["id"] == port_id and port["direction"] == "output" for port in manifest["ports"]):
+            raise ConfigError("transport_error", "Contract publisher does not own this output.")
+        if payload["contract_revision"] != entry.contract_revisions.get(port_id, 0) + 1:
+            raise ConfigError("transport_error", "Out-of-order media contract revision.")
+        source = (node_id, port_id)
+        previous = self.contracts.get(source)
+        publishing = message["kind"] == "contract"
+        if publishing:
+            if previous is not None and previous["transport_generation"] == payload["transport_generation"]:
+                raise ConfigError("transport_error", "Media replacement requires a new generation.")
+            validate_contract(self.modules.schemas, self.media_root, payload, inspect_rings=True)
+            # Allow enough space for the subscriber wrapper as well as the publisher frame.
+            if len(encode_frame(payload)) > 60 * 1024:
+                raise ConfigError("transport_error", "Media contract exceeds its IPC budget.")
+        elif previous is not None and previous["transport_generation"] != payload["transport_generation"]:
+            raise ConfigError("transport_error", "Withdrawal refers to a different media generation.")
+        entry.contract_revisions[port_id] = payload["contract_revision"]
+        if entry.desired_running and publishing:
+            self.contracts[source] = payload
+            self._fan_out(source, payload)
+        elif not publishing:
+            self.contracts.pop(source, None)
+            self._fan_out(source, None)
+        await write_frame(entry.writer, envelope(node_id, entry.instance_id, "ack", {"accepted": True}, message["request_id"]))
 
     async def _command(self, entry, command):
         """Send a correlated lifecycle command for the applied config revision."""
         await write_frame(entry.writer, envelope(entry.config["id"], entry.instance_id, "command", {"command": command, "config_revision": entry.config["revision"]}, str(uuid4())))
+        if command == "resync":
+            self._seed_subscriptions(entry)
 
     async def _events(self, entry, reader):
         """Accept only monotonic status from the authenticated inherited worker channel."""
@@ -287,6 +374,9 @@ class Supervisor:
             if message["node_id"] != entry.config["id"] or message["instance_id"] != entry.instance_id:
                 raise ConfigError("invalid_status", "Worker session identity mismatch.")
             if message["kind"] == "ack":
+                continue
+            if message["kind"] in {"contract", "contract_withdrawn"}:
+                await self._media_event(entry, message)
                 continue
             if message["kind"] != "status":
                 raise ConfigError("invalid_status", "Unsupported worker event.")
@@ -300,6 +390,12 @@ class Supervisor:
             previous, state = entry.status["state"], status["state"]
             if state != previous and state not in TRANSITIONS.get(previous, set()):
                 raise ConfigError("invalid_status", "Worker state transition is invalid.")
+            if state == "running" and previous != "running" and entry.desired_running:
+                ports = self.modules.get(entry.config["type"])["manifest"]["ports"]
+                if any(port["direction"] == "output" and port["required"] and (entry.config["id"], port["id"]) not in self.contracts for port in ports):
+                    raise ConfigError("transport_error", "Required output is not published.")
+            if (previous == "running" and state in {"waiting_source", "waiting_signal"}) or state in {"error", "stopping", "stopped"}:
+                self._revoke_media(entry)
             entry.status = status
             entry.last_worker_revision = status["status_revision"]
             entry.last_seen = time.monotonic()
@@ -320,8 +416,9 @@ class Supervisor:
         events = asyncio.create_task(self._events(entry, reader))
         exited = asyncio.create_task(entry.process.wait())
         watchdog = asyncio.create_task(self._watchdog(entry))
+        sender = asyncio.create_task(self._send_subscriptions(entry))
         try:
-            done, _ = await asyncio.wait([events, exited, watchdog], return_when=asyncio.FIRST_COMPLETED)
+            done, _ = await asyncio.wait([events, exited, watchdog, sender], return_when=asyncio.FIRST_COMPLETED)
             if exited not in done:
                 try:
                     for task in done:
@@ -331,15 +428,17 @@ class Supervisor:
                 await self._terminate(entry.process)
             await exited
         finally:
-            for task in (events, exited, watchdog):
+            self._revoke_media(entry)
+            for task in (events, exited, watchdog, sender):
                 task.cancel()
-            await asyncio.gather(events, exited, watchdog, return_exceptions=True)
+            await asyncio.gather(events, exited, watchdog, sender, return_exceptions=True)
             code = entry.process.returncode
             self._signal(entry.process, signal.SIGKILL)
             entry.last_exit_code = code
             self._log(entry, "worker.exited")
             entry.process = None
             entry.writer.close()
+            self._cleanup_media(entry)
             self._release(entry)
             manual_stop = not entry.desired_running
             existing_error = entry.status.get("error")
@@ -412,6 +511,7 @@ class Supervisor:
     async def _stop(self, entry):
         """Cancel recovery before requesting an idempotent stop and waiting for reaping."""
         entry.desired_running = False
+        self._revoke_media(entry)
         self._log(entry, "worker.stop_requested")
         if entry.restart_task is not None:
             entry.restart_task.cancel()
