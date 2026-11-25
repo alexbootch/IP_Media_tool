@@ -89,9 +89,12 @@
         <label for="graph-y">Координата Y<input type="number" id="graph-y" step="any" required></label>
       </div>
       <div id="graph-connections"></div>
-      <label for="graph-settings">Параметри модуля (JSON)</label>
-      <textarea id="graph-settings" rows="6" spellcheck="false" aria-describedby="graph-settings-help"></textarea>
-      <p class="field-help" id="graph-settings-help">Використовуй поля зі схеми модуля. Паролі й токени сюди не вводь.</p>
+      <div id="graph-module-settings"></div>
+      <div id="graph-json-settings">
+        <label for="graph-settings">Параметри модуля (JSON)</label>
+        <textarea id="graph-settings" rows="6" spellcheck="false" aria-describedby="graph-settings-help"></textarea>
+        <p class="field-help" id="graph-settings-help">Використовуй поля зі схеми модуля. Паролі й токени сюди не вводь.</p>
+      </div>
       <p class="form-error" id="graph-form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button subtle" id="graph-dialog-close">Закрити</button><button type="submit" class="button primary" id="graph-save">Зберегти</button></div>
     </form>

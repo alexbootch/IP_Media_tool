@@ -1,0 +1,4 @@
+[data-node-type="sdi-output"] > .node-sdi-output__fields {
+  display: grid;
+  gap: var(--node-field-gap);
+}

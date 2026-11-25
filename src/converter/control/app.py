@@ -171,6 +171,17 @@ def node_modules(current=Depends(identity)):
     return MODULES.snapshot()
 
 
+@app.get("/assets/node-modules/{node_type}/{asset}")
+def node_module_asset(node_type: str, asset: Literal["ui.js", "styles.css"], current=Depends(identity)):
+    """Serve only the two browser entry points of a registered release module."""
+    module = MODULES.get(node_type)
+    directory = MODULES.directory / module["manifest"]["type"]
+    path = (directory / asset).resolve()
+    if directory.is_symlink() or path != directory / asset or not path.is_file():
+        raise HTTPException(404, "Ресурс модуля недоступний.")
+    return FileResponse(path, media_type="text/javascript" if asset == "ui.js" else "text/css")
+
+
 @app.get("/api/nodes")
 def node_configs(current=Depends(identity)):
     """Return stored node configs and unresolved/invalid configuration diagnostics."""

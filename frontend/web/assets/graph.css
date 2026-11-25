@@ -68,3 +68,4 @@
 #graph-dialog { max-height: 90vh; overflow: auto; }
 #graph-connections label, #graph-connections select { display: block; width: 100%; }
 #graph-settings { width: 100%; resize: vertical; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-family: monospace; }
+#graph-module-settings { --node-field-gap: 0.5rem; }

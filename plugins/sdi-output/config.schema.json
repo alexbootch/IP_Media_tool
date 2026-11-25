@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeckLink SDI output settings v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "persistent_id",
+    "mode"
+  ],
+  "properties": {
+    "persistent_id": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,9})$"
+    },
+    "mode": {
+      "type": "string",
+      "pattern": "^(?:(?:ntsc(?:2398|-p)?|pal(?:-p)?)(?:-widescreen)?|[0-9]+(?:dci)?[pi][0-9]+)$",
+      "maxLength": 32
+    },
+    "video_format": {
+      "enum": [
+        "UYVY",
+        "v210"
+      ],
+      "default": "UYVY"
+    },
+    "playout_delay_ms": {
+      "type": "integer",
+      "minimum": 60,
+      "maximum": 500,
+      "default": 100
+    }
+  }
+}

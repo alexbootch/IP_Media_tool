@@ -1,6 +1,6 @@
 # Node SDK · public interface v1
 
-Python lifecycle API реалізований у `src/converter/node_sdk/` 2026-11-23; supervisor — окремий `converter.runtime` service. [Реалізація, межі й ручний запуск](../docs/WORKER_RUNTIME.uk.md). Нормативні правила: [NODE_STANDARD](../docs/NODE_STANDARD.uk.md). Схеми: [schemas/v1](../schemas/v1/README.md). Локально нічого не запускалося. JavaScript UI API нижче залишається специфікацією до етапу graph UI.
+Python lifecycle API реалізований у `src/converter/node_sdk/`; supervisor — окремий `converter.runtime` service. Форми SDI використовують JavaScript API нижче. [Реалізація, межі й ручний запуск](../docs/WORKER_RUNTIME.uk.md) · [NODE_STANDARD](../docs/NODE_STANDARD.uk.md) · [schemas/v1](../schemas/v1/README.md)
 
 ## Python worker
 
@@ -37,5 +37,7 @@ starting / waiting_source / waiting_signal / running / error → stopping → st
 `ui.js` експортує `mount(container, context)`. Повернене значення — controller з методами `updateConfig(config)`, `updateStatus(status)`, `updateCapabilities(capabilities)` та `unmount()`. Кожна функція/метод має JSDoc. Context містить node ID і API оболонки; жодного імпорту UI іншої ноди.
 
 `mount` повертає controller синхронно, а асинхронні запити обробляються з явним станом завантаження/помилки. `unmount` ідемпотентно знімає listeners, скасовує власні запити й таймери. Оновлення старого request не змінює новий/видалений instance. Методи update не переписують незбережені поля форми.
+
+У діалозі графа controller реалізує також `readSettings()`, який повертає поточні поля модуля для перевірки та збереження оболонкою. `updateConfig(null)` задає початкові значення нової ноди. Активні конфи відкриваються з `context.readOnly`; зміни status і capabilities надходять окремо від draft.
 
 Спільна оболонка зберігає config через versioned API, перевіряє права і надає кнопки lifecycle. Plugin UI визначає протокольні поля та їхній виклад. CSS підключає оболонка з manifest, один раз на тип; instance isolation забезпечують локальні DOM queries, root scope і IDs з UUID.

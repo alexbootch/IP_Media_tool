@@ -141,9 +141,9 @@ class ShmReader:
                 self.rings[endpoint] = ring
             self.files = pending.pop_all()
 
-    def read(self, endpoint_id):
-        """Copy one sample, or return None if none is currently available."""
-        frame = self.rings[endpoint_id].read()
+    def read(self, endpoint_id, *, newest=False):
+        """Copy one sample, optionally skipping history when joining a live feed."""
+        frame = self.rings[endpoint_id].read(newest=newest)
         if frame is not None:
             validate_sample(self.layouts[endpoint_id], frame)
         return frame

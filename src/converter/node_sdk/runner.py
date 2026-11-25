@@ -179,11 +179,22 @@ async def run(descriptor):
                 exit_code = 1 if context.status_snapshot()["error"]["retryable"] else 78
                 break
     except Exception as error:
-        exit_code = 78 if isinstance(error, ConfigError) else 1
+        code = error.code if isinstance(error, ConfigError) else "internal_error"
+        diagnostic = {
+            "unsupported_format": "The node or transport cannot use the negotiated media format.",
+            "hardware_unavailable": "The configured hardware is unavailable to the worker.",
+            "transport_error": "The worker could not access or publish its media transport.",
+            "pipeline_error": "The media pipeline failed. Check signal, mode and device access.",
+            "timeout": "The worker timed out waiting for playable media.",
+        }
+        exit_code = 78 if isinstance(error, ConfigError) and code not in {"pipeline_error", "timeout"} else 1
         if context is not None:
             try:
-                code = error.code if isinstance(error, ConfigError) and error.code in {"invalid_config", "incompatible_version", "dependency_unavailable"} else "pipeline_error"
-                await context.set_state("error", {"code": code, "message": "Worker initialization or control failed; inspect node dependencies and configuration.", "retryable": exit_code != 78})
+                if code not in diagnostic and code not in {"invalid_config", "incompatible_version", "dependency_unavailable"}:
+                    code = "pipeline_error"
+                # Plugin errors may contain interpolated media URLs. Disclose only the shared code.
+                message = diagnostic.get(code, "Worker initialization or control failed; inspect node dependencies and configuration.")
+                await context.set_state("error", {"code": code, "message": message, "retryable": exit_code != 78})
                 context.logger.event("worker.failed", logging.ERROR)
             except Exception:
                 pass

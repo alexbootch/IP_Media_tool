@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "type": "sdi-output",
+  "version": "1.0.0",
+  "sdk_version": 1,
+  "settings_version": 1,
+  "name": "SDI Output · DeckLink",
+  "kind": "output",
+  "worker": {
+    "path": "worker.py",
+    "class_name": "Worker"
+  },
+  "ui": {
+    "path": "ui.js",
+    "stylesheet": "styles.css"
+  },
+  "config_schema": "config.schema.json",
+  "ports": [
+    {
+      "id": "in",
+      "name": "Джерело A/V",
+      "direction": "input",
+      "contract_type": "raw_av",
+      "required": true
+    }
+  ],
+  "resource_bindings": [
+    {
+      "provider": "decklink",
+      "setting": "persistent_id",
+      "direction": "output"
+    }
+  ],
+  "requirements": {
+    "gstreamer_factories": [
+      "decklinkvideosink",
+      "decklinkaudiosink",
+      "appsrc",
+      "capsfilter",
+      "videoconvert",
+      "videoscale",
+      "videorate",
+      "deinterlace",
+      "interlace"
+    ],
+    "capabilities": [
+      {
+        "provider": "decklink",
+        "name": "output",
+        "required": true
+      }
+    ]
+  }
+}

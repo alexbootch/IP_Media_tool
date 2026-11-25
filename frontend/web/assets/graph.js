@@ -53,6 +53,7 @@ export function initializeGraph({ request, role }) {
     notice: $("graph-notice"), error: $("graph-error"), empty: $("graph-empty"), dialog: $("graph-dialog"),
     form: $("graph-form"), type: $("graph-type"), name: $("graph-name"), enabled: $("graph-enabled"),
     x: $("graph-x"), y: $("graph-y"), settings: $("graph-settings"), connections: $("graph-connections"),
+    moduleSettings: $("graph-module-settings"), jsonSettings: $("graph-json-settings"),
     formError: $("graph-form-error"), save: $("graph-save"), close: $("graph-dialog-close"),
   };
   const canEdit = role === "admin" || role === "operator";
@@ -69,6 +70,10 @@ export function initializeGraph({ request, role }) {
   let editBase = null;
   let drag = null;
   let formBusy = false;
+  let moduleController = null;
+  let formNodeId = null;
+  let settingsRevision = 0;
+  const moduleStyles = new Set();
   const commands = new Map();
   const cards = new Map();
   const resize = new ResizeObserver(queueEdges);
@@ -269,6 +274,7 @@ export function initializeGraph({ request, role }) {
           cursor = page.next_offset;
         } while (cursor !== null);
         workers = current;
+        void showModuleStatus(moduleController, editBase?.id);
         runtimeReady = true;
         ui.runtime.textContent = "Runtime підключено";
       } catch (failure) {
@@ -279,6 +285,20 @@ export function initializeGraph({ request, role }) {
         paintControls();
         if (drag && !editable(drag.config)) cancelDrag();
       }
+    }
+  }
+
+  /** Deliver the selected node's detailed status only to its still-open form. */
+  async function showModuleStatus(controller, id) {
+    if (!controller || !id) return;
+    const summary = workers.get(id);
+    if (!summary?.process_alive) {
+      controller.updateStatus(null);
+      return;
+    }
+    const detail = await request(`/api/nodes/${id}/status`, { signal: AbortSignal.timeout(7000) }).catch(() => null);
+    if (controller === moduleController && ui.dialog.open && detail?.status?.instance_id === workers.get(id)?.instance_id) {
+      controller.updateStatus(detail);
     }
   }
 
@@ -426,6 +446,7 @@ export function initializeGraph({ request, role }) {
   function openForm(config = null) {
     if (graphBusy || drag || (!config && (!canEdit || !runtimeReady || !modules.size))) return;
     editBase = config;
+    formNodeId = config?.id ?? nodeId();
     const readOnly = Boolean(config && !editable(config));
     $("graph-dialog-title").textContent = config ? (readOnly ? "Конфігурація ноди" : "Налаштування ноди") : "Додати ноду";
     ui.type.replaceChildren(...Array.from(modules.values(), (item) => new Option(item.name, item.type)));
@@ -448,6 +469,47 @@ export function initializeGraph({ request, role }) {
     ui.save.hidden = readOnly;
     showError(ui.formError);
     ui.dialog.showModal();
+    void showModuleSettings(config, readOnly);
+  }
+
+  /** Load a release module's form for this open dialog, keeping JSON as a fallback. */
+  async function showModuleSettings(config, readOnly) {
+    const revision = ++settingsRevision;
+    const type = ui.type.value;
+    const module = modules.get(type);
+    const initialJSON = ui.settings.value;
+    moduleController?.unmount();
+    moduleController = null;
+    ui.moduleSettings.replaceChildren();
+    ui.jsonSettings.hidden = false;
+    if (!module) return;
+    const base = `/assets/node-modules/${encodeURIComponent(type)}`;
+    try {
+      const { mount } = await import(`${base}/${module.ui.path}`);
+      if (typeof mount !== "function" || revision !== settingsRevision || !ui.dialog.open || ui.settings.value !== initialJSON) return;
+      const container = document.createElement("div");
+      container.dataset.nodeType = type;
+      const controller = mount(container, { nodeId: formNodeId, readOnly, request });
+      controller.updateConfig(config);
+      if (!moduleStyles.has(type)) {
+        const stylesheet = document.createElement("link");
+        stylesheet.rel = "stylesheet";
+        stylesheet.href = `${base}/${module.ui.stylesheet}`;
+        document.head.append(stylesheet);
+        moduleStyles.add(type);
+      }
+      ui.moduleSettings.replaceChildren(container);
+      ui.jsonSettings.hidden = true;
+      moduleController = controller;
+      void showModuleStatus(controller, config?.id);
+      let capabilities = null;
+      if (module.requirements.capabilities.some(({ provider }) => provider === "decklink")) {
+        capabilities = await request("/api/hardware/decklink-capabilities", { signal: AbortSignal.timeout(7000) }).catch(() => null);
+      }
+      if (revision === settingsRevision && ui.dialog.open) controller.updateCapabilities(capabilities);
+    } catch {
+      // Independent modules may fail to load or have only the generic JSON editor.
+    }
   }
 
   /** Collect the form, preserve secret references, and let server schemas validate settings. */
@@ -459,10 +521,13 @@ export function initializeGraph({ request, role }) {
     showError(ui.formError);
     try {
       const manifest = modules.get(ui.type.value);
-      const draft = editBase ?? { schema_version: 1, id: nodeId(), type: manifest.type, settings_version: manifest.settings_version, secret_refs: {} };
+      const draft = editBase ?? { schema_version: 1, id: formNodeId, type: manifest.type, settings_version: manifest.settings_version, secret_refs: {} };
       let settings;
-      try { settings = JSON.parse(ui.settings.value); }
-      catch { throw new Error("Параметри мають бути коректним JSON."); }
+      if (moduleController) settings = moduleController.readSettings();
+      else {
+        try { settings = JSON.parse(ui.settings.value); }
+        catch { throw new Error("Параметри мають бути коректним JSON."); }
+      }
       if (!settings || Array.isArray(settings) || typeof settings !== "object") throw new Error("Параметри мають бути JSON-об’єктом.");
       const connections = Object.create(null);
       for (const source of ui.connections.querySelectorAll("select")) {
@@ -485,11 +550,18 @@ export function initializeGraph({ request, role }) {
   ui.cancelEdge.addEventListener("click", () => { selection = null; showError(ui.notice); paintControls(); });
   ui.close.addEventListener("click", () => ui.dialog.close());
   ui.dialog.addEventListener("cancel", (event) => { if (formBusy) event.preventDefault(); });
+  ui.dialog.addEventListener("close", () => {
+    settingsRevision += 1;
+    moduleController?.unmount();
+    moduleController = null;
+  });
   ui.form.addEventListener("submit", submitConfig);
   ui.type.addEventListener("change", () => {
     const manifest = modules.get(ui.type.value);
     ui.name.value = manifest.name;
+    ui.settings.value = "{}";
     connectionFields({ connections: {} }, manifest.ports.filter((port) => port.direction === "input"), false);
+    void showModuleSettings(null, false);
   });
   loadGraph();
   pollLoop();

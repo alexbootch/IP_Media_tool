@@ -1,7 +1,11 @@
 """GStreamer boundary for canonical raw buffers and normalized TIME segments."""
 
+import re
+
 from converter.config.validation import ConfigError
-from converter.node_sdk.shm import DISCONT, GAP, MediaFrame
+from converter.node_sdk.shm import (
+    DISCONT, GAP, INTERLACED, ONE_FIELD, REPEAT_FIRST_FIELD, TOP_FIELD_FIRST, MediaFrame,
+)
 
 
 def gst():
@@ -13,6 +17,55 @@ def gst():
 
     Gst.init(None)
     return Gst
+
+
+def describe_caps(caps, endpoint_id, *, video):
+    """Describe fixed caps without substituting defaults for absent signal metadata."""
+    if caps.get_size() != 1 or not caps.is_fixed():
+        raise ConfigError("unsupported_format", "Expected fixed caps from a negotiated sample.")
+    structure = caps.get_structure(0)
+    description = {
+        "stream_id": endpoint_id, "endpoint_id": endpoint_id,
+        "caps": caps.to_string(), "format": structure.get_string("format"),
+    }
+    if video:
+        description.update(
+            width=structure.get_int("width")[1], height=structure.get_int("height")[1],
+            framerate=_fraction(structure, "framerate", "fps"),
+            pixel_aspect_ratio=_fraction(structure, "pixel-aspect-ratio", "par"),
+            interlace_mode=structure.get_string("interlace-mode"),
+            field_order=structure.get_string("field-order"),
+            colorimetry=structure.get_string("colorimetry"),
+            hdr_metadata=None,
+        )
+    else:
+        mask = re.search(r"(?:,\s*)channel-mask=\(bitmask\)(0x[0-9a-fA-F]+)", description["caps"])
+        description.update(
+            sample_rate=structure.get_int("rate")[1], channels=structure.get_int("channels")[1],
+            layout=structure.get_string("layout"), channel_labels=None,
+            channel_mask=mask[1] if mask else None,
+        )
+    return description
+
+
+def _fraction(structure, field, prefix):
+    """Keep the exact numerator and denominator when caps supply a positive fraction."""
+    present, numerator, denominator = structure.get_fraction(field)
+    return {f"{prefix}_num": numerator, f"{prefix}_den": denominator} if present and numerator > 0 else None
+
+
+def video_flag_map():
+    """Map GStreamer field flags to their dedicated SHM bits."""
+    import gi
+
+    gi.require_version("GstVideo", "1.0")
+    from gi.repository import GstVideo
+
+    flags = GstVideo.VideoBufferFlags
+    return (
+        (int(flags.INTERLACED), INTERLACED), (int(flags.TFF), TOP_FIELD_FIRST),
+        (int(flags.RFF), REPEAT_FIRST_FIELD), (int(flags.ONEFIELD), ONE_FIELD),
+    )
 
 
 def validate_caps(video, audio):
@@ -70,7 +123,7 @@ def validate_caps(video, audio):
     return layouts
 
 
-def from_gst_buffer(Gst, buffer, segment, *, video_flags=0):
+def from_gst_buffer(Gst, buffer, segment, *, video_flags=0, payload=None):
     """Copy a canonical CPU buffer and convert timestamps through its TIME segment."""
     if segment.format != Gst.Format.TIME or segment.rate != 1.0 or segment.applied_rate != 1.0:
         raise ConfigError("unsupported_format", "SHM v1 requires a forward rate-1 TIME segment.")
@@ -83,7 +136,8 @@ def from_gst_buffer(Gst, buffer, segment, *, video_flags=0):
         flags |= DISCONT
     if buffer.has_flags(Gst.BufferFlags.GAP):
         flags |= GAP
-    return MediaFrame(bytes(buffer.extract_dup(0, buffer.get_size())), pts, buffer.duration, -1 if dts == Gst.CLOCK_TIME_NONE else dts, flags)
+    data = bytes(buffer.extract_dup(0, buffer.get_size())) if payload is None else payload
+    return MediaFrame(data, pts, buffer.duration, -1 if dts == Gst.CLOCK_TIME_NONE else dts, flags)
 
 
 def to_gst_buffer(Gst, frame, *, base=0, video_flags=0):

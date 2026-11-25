@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "type": "sdi-input",
+  "version": "1.0.0",
+  "sdk_version": 1,
+  "settings_version": 1,
+  "name": "SDI Input · DeckLink",
+  "kind": "input",
+  "worker": {
+    "path": "worker.py",
+    "class_name": "Worker"
+  },
+  "ui": {
+    "path": "ui.js",
+    "stylesheet": "styles.css"
+  },
+  "config_schema": "config.schema.json",
+  "ports": [
+    {
+      "id": "out",
+      "name": "Відео й аудіо",
+      "direction": "output",
+      "contract_type": "raw_av",
+      "required": true
+    }
+  ],
+  "resource_bindings": [
+    {
+      "provider": "decklink",
+      "setting": "persistent_id",
+      "direction": "input"
+    }
+  ],
+  "requirements": {
+    "gstreamer_factories": [
+      "decklinkvideosrc",
+      "decklinkaudiosrc",
+      "appsink",
+      "capsfilter"
+    ],
+    "capabilities": [
+      {
+        "provider": "decklink",
+        "name": "input",
+        "required": true
+      }
+    ]
+  }
+}

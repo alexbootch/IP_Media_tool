@@ -63,7 +63,7 @@ Lifecycle 2026-11-23: написано Python node-sdk, inherited-FD worker host
 
 - [ ] Перевірити Linux NDI runtime/plugin, спільний пошук mDNS + Discovery Server, groups та ізоляцію worker contexts за сценаріями етапу 0.
 - [x] Додати SHM-контракти, `mmap`-кільця, fan-out та ізольований Linux-сценарій: джерело → два незалежні виходи. [SHM і приймання](SHM_TRANSPORT.uk.md).
-- [ ] Виконати сценарій на Linux і зафіксувати результат до приймання транспорту.
+- [x] Виконати синтетичний сценарій SHM fan-out на Linux. Користувач отримав `SHM fan-out acceptance passed` на `a4fbacfe1ac66de756c236e76c1cce7828efb1d1`.
 - [ ] Перевірити caps, timestamps/SEGMENT/discontinuity, clock/base-time mapping, A/V drift і затримку.
 - [ ] Перевірити late join, повільного consumer, full SHM, disconnect, producer restart і format change.
 - [ ] Обрати транспортну реалізацію за результатами metadata correctness, copies, RAM bandwidth і fan-out; визначити формат audio banks.
@@ -76,13 +76,14 @@ Lifecycle 2026-11-23: написано Python node-sdk, inherited-FD worker host
 
 GPU-частина 2026-11-19: написано background manager, disposable PCI/CUDA/GStreamer probe, versioned cache і header panel за підходом StreamMachine encoder_capabilities. Параметри effective per-device NVENC беруться зі встановленого GStreamer; hardware-only flags без native provider залишаються unknown. Локально не запускалося, [серверне приймання](GPU_CAPABILITIES.uk.md) відкрите.
 
-DeckLink-частина 2026-11-20: написано disposable provider scan, startup/manual background manager із кешем попереднього результату, API та панель у шапці. Кілька плат розрізняються за ID/serial, режими входу/виходу читаються окремо з device caps. Непідтверджене групування плат і фізичне BNC mapping не припускаються. [Серверне приймання](DECKLINK_CAPABILITIES.uk.md) відкрите; локально не запускалося. Media routes ще не реалізовані.
+DeckLink-частина: provider scan, startup/manual background manager із кешем попереднього результату, API та панель у шапці. Кілька плат розрізняються за ID/serial, режими входу/виходу читаються окремо з device caps. Фізичне BNC mapping підтверджується на сервері. [Серверне приймання детектора](DECKLINK_CAPABILITIES.uk.md).
 
 - [ ] Перенести й адаптувати DeckLink subprocess scanner та NVIDIA/NVENC capability helpers за reuse audit.
 - [ ] Додати stable identity, capability provenance, cache invalidation і діагностику unavailable/unknown/stale.
 - [ ] Перевірити board/subdevice/profile/duplex, точні video modes та audio limits; resource locking.
 - [ ] Зробити форми UI залежними від effective capabilities; GPU support відокремити від вільної місткості.
-- [ ] SDI input/output: actual signal caps, source loss/recovery, audio preservation, field order і AV timing.
+- [x] Реалізувати SDI Input/Output на DeckLink із SHM та окремими формами в графі.
+- [ ] Виконати [фізичний SDI loopback на Linux](SDI_ACCEPTANCE.uk.md): actual signal caps, source loss/recovery, PCM preservation, field order і A/V timing.
 - [ ] SRT input/output: caller/listener, latency, streamid/secrets, reconnect, demux/decode/encode/mux.
 - [ ] Output conversion profile: resolution, rational fps, progressive/interlaced, field order, codec/pixel format; audit зміни.
 

@@ -1,0 +1,4 @@
+[data-node-type="sdi-input"] > .node-sdi-input__fields {
+  display: grid;
+  gap: var(--node-field-gap);
+}

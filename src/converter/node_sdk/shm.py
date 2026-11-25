@@ -117,8 +117,8 @@ class Ring:
         finally:
             fcntl.flock(self.fd, fcntl.LOCK_UN)
 
-    def read(self):
-        """Copy the next retained sample, marking gaps without moving other cursors."""
+    def read(self, *, newest=False):
+        """Copy the next retained sample or start at the newest committed slot."""
         if self.writable or self.mapping is None:
             raise ValueError("SHM reader is closed or writable")
         try:
@@ -129,7 +129,7 @@ class Ring:
             latest = HEADER.unpack_from(self.mapping)[3]
             if latest <= self.cursor:
                 return None
-            sequence = max(self.cursor + 1, latest - self.slots + 1)
+            sequence = latest if newest else max(self.cursor + 1, latest - self.slots + 1)
             offset = self._offset(sequence)
             stored, pts, dts, duration, flags, length = SLOT.unpack_from(self.mapping, offset)
             if stored != sequence or not 0 < length <= self.slot_bytes or pts < 0 or dts < -1 or duration <= 0 or flags & ~KNOWN_FLAGS:
