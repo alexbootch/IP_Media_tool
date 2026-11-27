@@ -237,6 +237,13 @@ def worker_status(node_id: str, current=Depends(identity)):
     return RUNTIME.call("status", node_id=node_id)
 
 
+@app.get("/api/nodes/{node_id}/logs")
+def worker_logs(node_id: str, actor=Depends(node_editor)):
+    """Return recent diagnostics for one existing node via the private runtime."""
+    NODES.get(node_id)
+    return RUNTIME.call("logs", node_id=node_id)
+
+
 @app.post("/api/nodes/{node_id}/start", status_code=202)
 def start_worker(node_id: str, expected_revision: int, actor=Depends(node_editor)):
     """Explicitly start the requested config revision; acceptance is not readiness."""

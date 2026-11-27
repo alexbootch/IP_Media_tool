@@ -78,6 +78,15 @@
     </div>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="graph-log-dialog" aria-labelledby="graph-log-title">
+    <div class="dialog-heading"><h2 id="graph-log-title">Журнал ноди</h2></div>
+    <p class="form-error" id="graph-log-error" role="alert" hidden></p>
+    <pre id="graph-log-lines" tabindex="0" aria-label="Події ноди"></pre>
+    <div class="dialog-actions">
+      <button type="button" class="button subtle" id="graph-log-refresh">Оновити</button>
+      <button type="button" class="button subtle" id="graph-log-close">Закрити</button>
+    </div>
+  </dialog>
   <dialog id="graph-dialog" aria-labelledby="graph-dialog-title">
     <form id="graph-form">
       <div class="dialog-heading"><h2 id="graph-dialog-title">Нода</h2></div>

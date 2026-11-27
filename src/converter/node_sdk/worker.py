@@ -30,6 +30,10 @@ def utc_now():
     return datetime.now(timezone.utc).isoformat()
 
 
+class WorkerDiagnostic(ConfigError):
+    """Carry a bounded diagnostic built from fixed text and trusted library identifiers."""
+
+
 class NodeLogger:
     """Log event codes and session identity without arbitrary settings or secret values."""
 

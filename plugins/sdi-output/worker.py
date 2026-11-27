@@ -5,7 +5,7 @@ from dataclasses import replace
 from fractions import Fraction
 import re
 
-from converter.node_sdk import ConfigError, DISCONT, NodeWorker
+from converter.node_sdk import DISCONT, NodeWorker, WorkerDiagnostic
 from converter.node_sdk.gst_pipeline import check_bus, decklink_id, link_chain, make, play, set_enum
 from converter.node_sdk.gst_shm import describe_caps, gst, to_gst_buffer, video_flag_map
 
@@ -26,7 +26,7 @@ def mode_rate(mode):
         return SD_RATES[base]
     match = re.fullmatch(r"[0-9]+(?:dci)?([pi])([0-9]+)", base)
     if not match:
-        raise ConfigError("unsupported_format", "The DeckLink mode has no known picture cadence.")
+        raise WorkerDiagnostic("unsupported_format", "The DeckLink mode has no known picture cadence.")
     cadence = FRACTIONAL_RATES.get(match[2], Fraction(int(match[2])))
     return cadence / 2 if match[1] == "i" else cadence
 
@@ -68,7 +68,7 @@ class Worker(NodeWorker):
         cadence = Gst.Caps.from_string(f"video/x-raw,framerate={rate.numerator}/{rate.denominator}")
         target = sink.get_static_pad("sink").query_caps(cadence)
         if target.get_size() != 1 or not target.is_fixed():
-            raise ConfigError("unsupported_format", "The DeckLink sink did not expose fixed output caps.")
+            raise WorkerDiagnostic("unsupported_format", "The DeckLink sink did not expose fixed output caps.")
         return target
 
     def video_chain(self, source, target_caps):
@@ -77,7 +77,7 @@ class Worker(NodeWorker):
         target = describe_caps(target_caps, "video", video=True)
         source_scan, target_scan = source["interlace_mode"], target["interlace_mode"]
         if source_scan not in {None, "progressive", "interleaved"}:
-            raise ConfigError("unsupported_format", "SDI output requires progressive or interleaved raw frames.")
+            raise WorkerDiagnostic("unsupported_format", "SDI output requires progressive or interleaved raw frames.")
         same_raster = all(source[key] == target[key] for key in (
             "width", "height", "framerate", "pixel_aspect_ratio", "interlace_mode"))
         # The DeckLink mode's field order is implicit in sink caps.
@@ -117,11 +117,11 @@ class Worker(NodeWorker):
         Gst = self.Gst
         video, tracks = contract["video"], contract["audio"]
         if video is None or len(tracks) != 1:
-            raise ConfigError("unsupported_format", "SDI output requires video and one interleaved PCM bank.")
+            raise WorkerDiagnostic("unsupported_format", "SDI output requires video and one interleaved PCM bank.")
         audio = tracks[0]
         if (audio["channels"] not in {2, 8, 16} or audio["sample_rate"] != 48000
                 or audio["format"] not in {"S16LE", "S32LE"} or audio["layout"] != "interleaved"):
-            raise ConfigError("unsupported_format", "DeckLink requires 48 kHz interleaved PCM with 2, 8 or 16 channels.")
+            raise WorkerDiagnostic("unsupported_format", "DeckLink requires 48 kHz interleaved PCM with 2, 8 or 16 channels.")
         self.pipeline = Gst.Pipeline.new("sdi-playout")
         # The DeckLink clock stands still until both sinks enable hardware playback.
         # Its sinks map the shared pipeline clock to hardware as playback starts.
@@ -205,9 +205,9 @@ class Worker(NodeWorker):
                 self.metrics.update(video_caps=video_caps.to_string(), audio_caps=audio_caps.to_string())
                 await self.context.set_state("running")
             elif not ready and loop.time() > deadline:
-                raise ConfigError("timeout", "SDI playback did not receive negotiated audio and video.")
+                raise WorkerDiagnostic("timeout", "SDI playback did not receive negotiated audio and video.")
             elif ready and loop.time() - min(submitted.values()) > 2:
-                raise ConfigError("timeout", "SDI playback could not maintain its shared A/V timeline.")
+                raise WorkerDiagnostic("timeout", "SDI playback could not maintain its shared A/V timeline.")
             await asyncio.sleep(0.002)
 
     def push(self, kind, app, frame, origin, anchor):
@@ -219,7 +219,7 @@ class Worker(NodeWorker):
         if buffer.dts != Gst.CLOCK_TIME_NONE:
             buffer.dts += anchor
         if app.emit("push-buffer", buffer) != Gst.FlowReturn.OK:
-            raise ConfigError("pipeline_error", "DeckLink appsrc stopped accepting frames.")
+            raise WorkerDiagnostic("pipeline_error", "DeckLink appsrc stopped accepting frames.")
         self.metrics[kind + "_buffers"] += 1
 
     async def get_status(self):

@@ -17,7 +17,7 @@ from converter.runtime.supervisor import Supervisor
 
 
 LOGGER = logging.getLogger("ip-media-tool.runtime")
-OPERATIONS = {"start", "stop", "status", "list", "save_config", "delete_config"}
+OPERATIONS = {"start", "stop", "status", "list", "logs", "save_config", "delete_config"}
 
 
 class RuntimeServer:
@@ -44,11 +44,12 @@ class RuntimeServer:
             if request.get("schema_version") != 1 or request.get("operation") not in OPERATIONS or not isinstance(request.get("arguments"), dict):
                 raise ConfigError("invalid_message", "Unsupported runtime request.")
             operation = request["operation"]
-            if operation not in {"list", "status"} and request.get("application_revision") != self.supervisor.root.name:
+            if operation not in {"list", "status", "logs"} and request.get("application_revision") != self.supervisor.root.name:
                 raise ConfigError("incompatible_version", "Web and runtime releases differ; stop runtime before updating and start the new service manually.", 409)
             result = await asyncio.wait_for(self.supervisor.dispatch(operation, request["arguments"]), 85)
             await write_frame(writer, {"schema_version": 1, "request_id": request_id, "ok": True, "result": result})
-            LOGGER.info("runtime.command operation=%s request_id=%s", operation, request_id)
+            if operation != "logs":
+                LOGGER.info("runtime.command operation=%s request_id=%s", operation, request_id)
         except ConfigError as error:
             await self._error(writer, request_id, error)
         except (KeyError, TypeError, ValueError):

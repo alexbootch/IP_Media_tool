@@ -6,6 +6,16 @@ const STATUS = {
 };
 const SVG_NS = "http://www.w3.org/2000/svg";
 const LIMIT = 100000;
+const LOG_EVENTS = {
+  "worker.start_requested": "Запит запуску",
+  "worker.start_failed": "Запуск відхилено",
+  "worker.spawned": "Процес створено",
+  "worker.exited": "Процес завершено",
+  "worker.recovery_scheduled": "Заплановано повторний запуск",
+  "worker.recovery_failed": "Повторний запуск відхилено",
+  "worker.stop_requested": "Запит зупинки",
+  "worker.channel_failed": "Помилка обміну з воркером",
+};
 
 /** Make a plain element, keeping server content out of HTML and CSS strings. */
 function element(tag, label = "", className = "") {
@@ -55,6 +65,8 @@ export function initializeGraph({ request, role }) {
     x: $("graph-x"), y: $("graph-y"), settings: $("graph-settings"), connections: $("graph-connections"),
     moduleSettings: $("graph-module-settings"), jsonSettings: $("graph-json-settings"),
     formError: $("graph-form-error"), save: $("graph-save"), close: $("graph-dialog-close"),
+    logDialog: $("graph-log-dialog"), logTitle: $("graph-log-title"), logLines: $("graph-log-lines"),
+    logError: $("graph-log-error"), logRefresh: $("graph-log-refresh"), logClose: $("graph-log-close"),
   };
   const canEdit = role === "admin" || role === "operator";
   let nodes = new Map();
@@ -70,6 +82,7 @@ export function initializeGraph({ request, role }) {
   let editBase = null;
   let drag = null;
   let formBusy = false;
+  let logView = null;
   let moduleController = null;
   let formNodeId = null;
   let settingsRevision = 0;
@@ -215,6 +228,7 @@ export function initializeGraph({ request, role }) {
       const stop = button("Зупинити", () => lifecycle(config, "stop"));
       start.hidden = stop.hidden = !canEdit;
       actions.append(edit, start, stop);
+      if (canEdit) actions.append(button("Журнал", () => openNodeLog(config)));
       root.append(header, status, portList, actions);
       const card = { root, header, status, portList, edit, start, stop, ports: [], anchors: new Map() };
       cards.set(config.id, card);
@@ -302,9 +316,50 @@ export function initializeGraph({ request, role }) {
     }
   }
 
+  /** Open one node's journal and discard any responses from an earlier dialog. */
+  function openNodeLog(config) {
+    logView = { id: config.id, loading: false };
+    ui.logTitle.textContent = `Журнал · ${config.name}`;
+    ui.logLines.textContent = "Завантаження…";
+    showError(ui.logError);
+    ui.logDialog.showModal();
+    void loadNodeLog();
+  }
+
+  /** Format one bounded runtime event without injecting HTML. */
+  function logLine(event) {
+    const when = new Date(event.at).toLocaleString("uk-UA");
+    const state = event.event_code.startsWith("worker.state.") ? event.event_code.slice("worker.state.".length) : "";
+    const label = STATUS[state] ?? LOG_EVENTS[event.event_code] ?? event.event_code;
+    const error = event.error_code ? ` [${event.error_code}] ${event.message}` : "";
+    const exit = event.event_code === "worker.exited" && event.exit_code !== null ? ` (код ${event.exit_code})` : "";
+    return `${when}  ${label}${exit}${error}`;
+  }
+
+  /** Refresh only the open journal and keep the last output if a request fails. */
+  async function loadNodeLog() {
+    const view = logView;
+    if (!view || !ui.logDialog.open || view.loading) return;
+    view.loading = true;
+    ui.logRefresh.disabled = true;
+    try {
+      const { events } = await request(`/api/nodes/${view.id}/logs`, { signal: AbortSignal.timeout(7000) });
+      if (logView !== view || !ui.logDialog.open) return;
+      const text = [...events].reverse().map(logLine).join("\n");
+      const next = text || "Подій запуску або зупинки ще немає.";
+      if (ui.logLines.textContent !== next) ui.logLines.textContent = next;
+      showError(ui.logError);
+    } catch (failure) {
+      if (logView === view && ui.logDialog.open) showError(ui.logError, failureText(failure));
+    } finally {
+      view.loading = false;
+      if (logView === view) ui.logRefresh.disabled = false;
+    }
+  }
+
   /** Schedule the next status poll only after the current one finishes. */
   async function pollLoop() {
-    try { await pollWorkers(); }
+    try { await Promise.all([pollWorkers(), loadNodeLog()]); }
     finally { setTimeout(pollLoop, 2500); }
   }
 
@@ -549,6 +604,9 @@ export function initializeGraph({ request, role }) {
   ui.reload.addEventListener("click", loadGraph);
   ui.cancelEdge.addEventListener("click", () => { selection = null; showError(ui.notice); paintControls(); });
   ui.close.addEventListener("click", () => ui.dialog.close());
+  ui.logClose.addEventListener("click", () => ui.logDialog.close());
+  ui.logRefresh.addEventListener("click", loadNodeLog);
+  ui.logDialog.addEventListener("close", () => { logView = null; });
   ui.dialog.addEventListener("cancel", (event) => { if (formBusy) event.preventDefault(); });
   ui.dialog.addEventListener("close", () => {
     settingsRevision += 1;

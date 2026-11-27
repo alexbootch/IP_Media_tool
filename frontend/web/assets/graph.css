@@ -69,3 +69,14 @@
 #graph-connections label, #graph-connections select { display: block; width: 100%; }
 #graph-settings { width: 100%; resize: vertical; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-family: monospace; }
 #graph-module-settings { --node-field-gap: 0.5rem; }
+#graph-log-dialog { width: min(720px, calc(100% - 2rem)); }
+#graph-log-lines {
+  max-height: 55vh;
+  overflow: auto;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

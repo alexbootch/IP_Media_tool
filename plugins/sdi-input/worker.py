@@ -3,7 +3,7 @@
 import asyncio
 from dataclasses import replace
 
-from converter.node_sdk import ConfigError, DISCONT, NodeWorker
+from converter.node_sdk import DISCONT, NodeWorker, WorkerDiagnostic
 from converter.node_sdk.gst_pipeline import check_bus, decklink_id, link_chain, make, play, set_enum
 from converter.node_sdk.gst_shm import describe_caps, from_gst_buffer, gst, validate_caps, video_flag_map
 from converter.node_sdk.shm import MAX_BYTES, ring_size
@@ -96,7 +96,7 @@ class Worker(NodeWorker):
             if previous is None or not previous.is_equal(caps):
                 self.video_info = self.GstVideo.VideoInfo.new_from_caps(caps)
                 if self.video_info is None or caps.get_structure(0).get_string("format") not in VIDEO_FORMATS:
-                    raise ConfigError("unsupported_format", "Unsupported packed DeckLink capture format.")
+                    raise WorkerDiagnostic("unsupported_format", "Unsupported packed DeckLink capture format.")
             payload = self.video_payload(buffer)
             native = int(buffer.get_flags())
             flags = sum(shared for bit, shared in self.flags if native & bit)
@@ -130,7 +130,7 @@ class Worker(NodeWorker):
         meta = self.GstVideo.buffer_get_video_meta(buffer)
         if meta is None:
             if buffer.get_size() != info.size:
-                raise ConfigError("unsupported_format", "DeckLink frame has no canonical layout or stride metadata.")
+                raise WorkerDiagnostic("unsupported_format", "DeckLink frame has no canonical layout or stride metadata.")
             return None
         stride, offset = meta.stride[0], meta.offset[0]
         target_stride = info.stride[0]
@@ -142,7 +142,7 @@ class Worker(NodeWorker):
         if (meta.n_planes != 1 or offset < 0 or min(stride, target_stride) < row_bytes
                 or offset + stride * (info.height - 1) + row_bytes > buffer.get_size()
                 or target_stride * info.height > info.size):
-            raise ConfigError("unsupported_format", "Unsupported DeckLink frame stride.")
+            raise WorkerDiagnostic("unsupported_format", "Unsupported DeckLink frame stride.")
         image = bytearray(info.size)
         with buffer.map(self.Gst.MapFlags.READ) as mapping:
             for row in range(info.height):

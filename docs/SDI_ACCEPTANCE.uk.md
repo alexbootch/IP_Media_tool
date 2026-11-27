@@ -48,11 +48,13 @@ sudo -u ip-media-tool env PYTHONPATH="$PWD/src" PYTHONDONTWRITEBYTECODE=1 \
 - Налаштуй 8 або 16 каналів на **A** і **C**. По черзі подай контрольний тон на кожен embedded канал і перевір його позицію на приймачі. Окремо виміряй A/V на першому каналі. Збережи модель плати, профіль, persistent ID, драйвер, версію GStreamer, режим, глибину PCM і результат.
 - Зупини **B** на графі. Лічильники **A** мають далі зростати. Запусти **B** і перевір повторне підключення до того самого джерела. Після перевірки зупини три тестові ноди, якщо маршрут більше не потрібен.
 
-Для діагностики станів та конфліктів бронювання:
+У графі адміністратор або оператор може відкрити **Журнал** на картці ноди. Там видно запити запуску, відмови preflight, зміни стану, помилки воркера й повторні спроби. Журнал у браузері показує останні події від поточного запуску runtime. Історію systemd на Ubuntu можна прочитати окремо.
 
 ```bash
-sudo journalctl -u ip-media-tool-runtime -b -n 150 --no-pager
+sudo journalctl -u ip-media-tool-runtime -u ip-media-tool -b -n 150 --no-pager
 df -h /run
 ```
+
+Щоб побачити помилку в момент запуску SDI Input, виконай `sudo journalctl -u ip-media-tool-runtime -b -f -o cat`, потім натисни **Запустити** в графі.
 
 Вихід працює з одним embedded PCM-банком 48 кГц і 2, 8 або 16 каналами. SHM переносить сире відео й PCM. SDI ANC, RP188, субтитри та HDR side data поза межами цього маршруту. Точні режими, пропуски і довготривалий drift підтверджуються окремо на кожній комбінації обладнання та формату. [GStreamer DeckLink video input](https://gstreamer.freedesktop.org/documentation/decklink/decklinkvideosrc.html) · [GStreamer DeckLink video output](https://gstreamer.freedesktop.org/documentation/decklink/decklinkvideosink.html) · [GStreamer DeckLink audio output](https://gstreamer.freedesktop.org/documentation/decklink/decklinkaudiosink.html)

@@ -10,11 +10,12 @@ import os
 from pathlib import Path
 import signal
 import socket
+import traceback
 
 from converter.config.modules import ModuleRegistry
 from converter.config.validation import ConfigError, SchemaRegistry, canonical_id
 from converter.node_sdk.media import GenerationRetired
-from converter.node_sdk.worker import NodeWorker, WorkerContext
+from converter.node_sdk.worker import NodeWorker, WorkerContext, WorkerDiagnostic
 from converter.runtime.protocol import peer_credentials, read_frame
 
 
@@ -119,8 +120,8 @@ def load_worker(root, node_type):
     sys.modules[name] = module
     try:
         specification.loader.exec_module(module)
-    except (ImportError, SyntaxError):
-        raise ConfigError("dependency_unavailable", "Plugin import/dependency validation failed.") from None
+    except (ImportError, SyntaxError) as error:
+        raise ConfigError("dependency_unavailable", "Plugin import/dependency validation failed.") from error
     worker_class = getattr(module, "Worker", None)
     if not inspect.isclass(worker_class) or not issubclass(worker_class, NodeWorker) or inspect.isabstract(worker_class):
         raise ConfigError("incompatible_version", "Plugin Worker must inherit NodeWorker.")
@@ -128,6 +129,18 @@ def load_worker(root, node_type):
         if not inspect.iscoroutinefunction(getattr(worker_class, method, None)):
             raise ConfigError("incompatible_version", "Worker lifecycle methods must be async.")
     return worker_class
+
+
+def failure_location(error):
+    """Describe the final source location without exception values, paths or source text."""
+    cause = error.__cause__ or error
+    if isinstance(cause, SyntaxError) and cause.filename:
+        return f"SyntaxError at {Path(cause.filename).name}:{cause.lineno}."
+    frames = traceback.extract_tb(cause.__traceback__)
+    if not frames:
+        return type(cause).__name__
+    last = frames[-1]
+    return f"{type(cause).__name__} at {Path(last.filename).name}:{last.lineno} ({last.name})."
 
 
 async def run(descriptor):
@@ -179,7 +192,7 @@ async def run(descriptor):
                 exit_code = 1 if context.status_snapshot()["error"]["retryable"] else 78
                 break
     except Exception as error:
-        code = error.code if isinstance(error, ConfigError) else "internal_error"
+        code = error.code if isinstance(error, ConfigError) else "timeout" if isinstance(error, TimeoutError) else "internal_error"
         diagnostic = {
             "unsupported_format": "The node or transport cannot use the negotiated media format.",
             "hardware_unavailable": "The configured hardware is unavailable to the worker.",
@@ -192,8 +205,11 @@ async def run(descriptor):
             try:
                 if code not in diagnostic and code not in {"invalid_config", "incompatible_version", "dependency_unavailable"}:
                     code = "pipeline_error"
-                # Plugin errors may contain interpolated media URLs. Disclose only the shared code.
                 message = diagnostic.get(code, "Worker initialization or control failed; inspect node dependencies and configuration.")
+                if isinstance(error, WorkerDiagnostic):
+                    message = str(error)
+                elif not isinstance(error, ConfigError) or error.__cause__ is not None:
+                    message = f"{message} {failure_location(error)}"
                 await context.set_state("error", {"code": code, "message": message, "retryable": exit_code != 78})
                 context.logger.event("worker.failed", logging.ERROR)
             except Exception:

@@ -1,6 +1,7 @@
 """Single-owner process supervision with bounded retries and per-instance leases."""
 
 import asyncio
+from collections import OrderedDict, deque
 import copy
 from dataclasses import dataclass, field
 import json
@@ -26,6 +27,8 @@ HEARTBEAT_TIMEOUT = 15
 START_TIMEOUT = 30
 STOP_TIMEOUT = 8
 EXIT_GRACE = 2
+LOG_NODE_LIMIT = 128
+LOG_EVENT_LIMIT = 24
 LOGGER = logging.getLogger("ip-media-tool.runtime")
 
 
@@ -66,6 +69,7 @@ class Supervisor:
         self.closing = False
         self.media_root = Path(media_root) if media_root is not None else None
         self.contracts = {}
+        self.events = OrderedDict()
 
     def snapshot(self, node_id=None):
         """Report absent workers as stopped without inventing an instance UUID."""
@@ -82,9 +86,22 @@ class Supervisor:
         """Serialize one node without blocking stop commands for unrelated workers."""
         return self.control_locks.setdefault(node_id, asyncio.Lock())
 
-    def _log(self, entry, event_code):
-        """Record lifecycle identity and retry counts without configuration values."""
-        LOGGER.info(json.dumps({"event_code": event_code, "node_id": entry.config["id"], "node_type": entry.config["type"], "instance_id": entry.instance_id, "config_revision": entry.config["revision"], "restart_count": entry.restart_count, "exit_code": entry.last_exit_code}))
+    def _log(self, entry, event_code, *, error=None):
+        """Retain bounded lifecycle events and mirror them to the system journal."""
+        node_id = entry.config["id"]
+        event = {"at": utc_now(), "event_code": event_code, "node_id": node_id,
+                 "node_type": entry.config["type"], "instance_id": entry.instance_id or None,
+                 "config_revision": entry.config["revision"], "restart_count": entry.restart_count,
+                 "exit_code": entry.last_exit_code}
+        if error is not None:
+            message = error["message"].encode("utf-8")[:240].decode("utf-8", errors="ignore")
+            event.update(error_code=error["code"], message=message)
+        history = self.events.setdefault(node_id, deque(maxlen=LOG_EVENT_LIMIT))
+        history.append(event)
+        self.events.move_to_end(node_id)
+        if len(self.events) > LOG_NODE_LIMIT:
+            self.events.popitem(last=False)
+        LOGGER.log(logging.WARNING if error else logging.INFO, json.dumps(event, ensure_ascii=False))
 
     async def dispatch(self, operation, arguments):
         """Serialize lifecycle and writes so config edits cannot race a start."""
@@ -105,6 +122,9 @@ class Supervisor:
             return {"workers": workers, "next_offset": offset + 16 if offset + 16 < len(keys) else None, "application_revision": self.root.name, "autostart": False}
         if operation == "status":
             return self.snapshot(arguments["node_id"])
+        if operation == "logs":
+            node_id = canonical_id(arguments["node_id"])
+            return {"events": list(self.events.get(node_id, ()))}
         config_argument = arguments.get("config")
         node_id = canonical_id(config_argument.get("id") if operation == "save_config" and isinstance(config_argument, dict) else arguments.get("node_id"))
         if operation == "stop":
@@ -133,14 +153,17 @@ class Supervisor:
                     raise ConfigError("invalid_config", "Node is disabled; enable it explicitly before starting.", 409)
                 entry = WorkerEntry(config=config)
                 self.launch_tasks[node_id] = asyncio.current_task()
+                self._log(entry, "worker.start_requested")
                 try:
                     await asyncio.wait_for(self._preflight(entry), 75)
                     self.entries[node_id] = entry
                     await self._spawn(entry)
-                except BaseException:
+                except BaseException as error:
                     entry.desired_running = False
                     self._release(entry)
                     self.entries.pop(node_id, None)
+                    if not isinstance(error, asyncio.CancelledError):
+                        self._log(entry, "worker.start_failed", error=self._launch_error(error))
                     raise
                 finally:
                     self.launch_tasks.pop(node_id, None)
@@ -161,6 +184,7 @@ class Supervisor:
                 if operation == "save_config":
                     return await self._store_write(self.nodes.save, config, arguments["expected_revision"])
                 await self._store_write(self.nodes.delete, node_id, arguments["expected_revision"])
+                self.events.pop(node_id, None)
                 return {"deleted": node_id}
             raise ConfigError("invalid_message", "Unsupported runtime operation.")
 
@@ -202,7 +226,14 @@ class Supervisor:
         with tempfile.TemporaryDirectory(prefix="ip-media-worker-preflight-") as temporary:
             environment = {**os.environ, "GST_REGISTRY": str(Path(temporary) / "registry.bin")}
             for factory in requirements["gstreamer_factories"]:
-                await self._probe(["/usr/bin/gst-inspect-1.0", "--exists", factory], environment, 10, capture=False)
+                try:
+                    await self._probe(["/usr/bin/gst-inspect-1.0", "--exists", factory], environment, 10, capture=False)
+                except FileNotFoundError:
+                    raise ConfigError("dependency_unavailable", "gst-inspect-1.0 is missing on the server.", 409) from None
+                except TimeoutError:
+                    raise ConfigError("timeout", f"GStreamer probe timed out for {factory}.", 409) from None
+                except ConfigError:
+                    raise ConfigError("dependency_unavailable", f"GStreamer factory is unavailable: {factory}.", 409) from None
         bindings = manifest.get("resource_bindings", [])
         required_directions = {item["name"] for item in requirements["capabilities"] if item["required"] and item["provider"] == "decklink"}
         if not required_directions.issubset({binding["direction"] for binding in bindings}):
@@ -211,7 +242,12 @@ class Supervisor:
             raise ConfigError("invalid_config", "DeckLink plugins must declare resource_bindings.")
         leases = []
         if bindings:
-            payload = await self._probe([sys.executable, "-m", "converter.hardware.decklink.probe"], self._environment(), 60)
+            try:
+                payload = await self._probe([sys.executable, "-m", "converter.hardware.decklink.probe"], self._environment(), 60)
+            except TimeoutError:
+                raise ConfigError("timeout", "DeckLink inventory probe timed out.", 409) from None
+            except ConfigError:
+                raise ConfigError("dependency_unavailable", "DeckLink inventory probe failed. Check the DeckLink panel and service device access.", 409) from None
             for binding in bindings:
                 resource_id = config["settings"].get(binding["setting"])
                 if not isinstance(resource_id, str) or not resource_id or len(resource_id) > 128:
@@ -228,6 +264,15 @@ class Supervisor:
         entry.leases = leases
         for lease in leases:
             self.resource_owners["decklink:" + lease["resource_id"]] = config["id"]
+
+    @staticmethod
+    def _launch_error(error):
+        """Describe supervisor launch failures without emitting process arguments or raw exceptions."""
+        if isinstance(error, ConfigError):
+            return {"code": error.code, "message": str(error)}
+        if isinstance(error, TimeoutError):
+            return {"code": "timeout", "message": "Worker launch exceeded its deadline."}
+        return {"code": "internal_error", "message": f"Worker launch failed ({type(error).__name__})."}
 
     def _environment(self):
         """Pin child imports to this release rather than the mutable current symlink."""
@@ -400,6 +445,8 @@ class Supervisor:
             entry.status = status
             entry.last_worker_revision = status["status_revision"]
             entry.last_seen = time.monotonic()
+            if state != previous:
+                self._log(entry, "worker.state." + state, error=status["error"])
             if state == "error":
                 return
 
@@ -423,6 +470,8 @@ class Supervisor:
             if exited not in done:
                 failures = [task.exception() for task in done]
                 eof = failures[0] if done == {events} else None
+                if isinstance(eof, ConfigError):
+                    self._log(entry, "worker.channel_failed", error=self._launch_error(eof))
                 clean_stop = (
                     not entry.desired_running
                     and entry.status["state"] == "stopped"
@@ -430,8 +479,8 @@ class Supervisor:
                     and eof.expected == 4
                     and not eof.partial
                 )
-                if clean_stop:
-                    # SDK closes the socket after publishing stopped, just before Python exits.
+                if clean_stop or (done == {events} and entry.status["state"] == "error" and eof is None):
+                    # Let the SDK clean up before observing its real exit code.
                     try:
                         await asyncio.wait_for(asyncio.shield(exited), EXIT_GRACE)
                     except TimeoutError:
@@ -470,7 +519,10 @@ class Supervisor:
 
     def _terminal(self, entry, state, error):
         """Record a final supervisor observation after the worker channel has ended."""
+        changed = state != entry.status["state"] or error != entry.status["error"]
         entry.status = {**entry.status, "state": state, "error": error, "status_revision": entry.status["status_revision"] + 1, "updated_at": utc_now()}
+        if changed:
+            self._log(entry, "worker.state." + state, error=error)
 
     async def _recover(self, entry):
         """Back off without resetting the retry budget; revalidate the exact config."""
@@ -489,10 +541,12 @@ class Supervisor:
                 self._release(entry)
                 entry.desired_running = False
                 raise
-            except Exception:
+            except Exception as error:
                 self._release(entry)
                 entry.desired_running = False
-                self._terminal(entry, "error", {"code": "dependency_unavailable", "message": "Worker recovery failed preflight; manual action is required.", "retryable": False})
+                failure = self._launch_error(error)
+                self._log(entry, "worker.recovery_failed", error=failure)
+                self._terminal(entry, "error", {"code": "dependency_unavailable", "message": failure["message"], "retryable": False})
 
     @staticmethod
     def _signal(process, value):
