@@ -271,8 +271,12 @@ for service_log in runtime.log web.log; do
     [[ -f "$LOG_DIR/$service_log" ]] || die 'Service log must be a regular file.'
 done
 find -P "$LOG_DIR" -maxdepth 1 -type f -exec setfacl -m "g:$LOG_GROUP:r" -- {} +
-runuser -u ip-media-tool -- find -P "$LOG_DIR/nodes" "$LOG_DIR/audit" -maxdepth 1 -type f \
-    -exec setfacl -m "g:$LOG_GROUP:r" -- {} +
+# The caller's working directory can be a private home that the service user cannot enter.
+(
+    cd /
+    runuser -u ip-media-tool -- find -P "$LOG_DIR/nodes" "$LOG_DIR/audit" -maxdepth 1 -type f \
+        -exec setfacl -m "g:$LOG_GROUP:r" -- {} +
+)
 if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != root && "${SUDO_USER}" != ip-media-tool &&
       "${SUDO_UID:-}" =~ ^[1-9][0-9]*$ ]]; then
     operator_uid=$(id -u -- "$SUDO_USER" 2>/dev/null) || operator_uid=
