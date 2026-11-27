@@ -2,6 +2,7 @@
 
 import asyncio
 import fcntl
+import json
 import logging
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import tempfile
 from converter.config.modules import ModuleRegistry
 from converter.config.store import NodeConfigStore
 from converter.config.validation import ConfigError, SchemaRegistry, canonical_id
+from converter.runtime.diagnostics import exception_details
 from converter.runtime.protocol import peer_credentials, read_frame, write_frame
 from converter.runtime.supervisor import Supervisor
 
@@ -35,28 +37,44 @@ class RuntimeServer:
             writer.close()
             return
         self.handlers.add(task)
-        request_id = None
+        request_id = operation = node_id = None
+        phase = "request"
         try:
             if peer_credentials(writer.get_extra_info("socket"))[1] not in {0, os.getuid()}:
                 raise ConfigError("forbidden", "Runtime peer is not authorized.", 403)
             request = await read_frame(reader)
             request_id = canonical_id(request.get("request_id"))
-            if request.get("schema_version") != 1 or request.get("operation") not in OPERATIONS or not isinstance(request.get("arguments"), dict):
+            requested = request.get("operation")
+            arguments = request.get("arguments")
+            if request.get("schema_version") != 1 or not isinstance(requested, str) or requested not in OPERATIONS or not isinstance(arguments, dict):
                 raise ConfigError("invalid_message", "Unsupported runtime request.")
-            operation = request["operation"]
+            operation = requested
+            if operation in {"start", "stop", "status", "logs", "delete_config"}:
+                node_id = canonical_id(arguments.get("node_id"))
+            elif operation == "save_config" and isinstance(arguments.get("config"), dict):
+                node_id = canonical_id(arguments["config"].get("id"))
+            if operation in {"save_config", "delete_config"} and "expected_revision" not in arguments:
+                raise ConfigError("invalid_message", "Expected config revision is required.")
             if operation not in {"list", "status", "logs"} and request.get("application_revision") != self.supervisor.root.name:
                 raise ConfigError("incompatible_version", "Web and runtime releases differ; stop runtime before updating and start the new service manually.", 409)
-            result = await asyncio.wait_for(self.supervisor.dispatch(operation, request["arguments"]), 85)
+            phase = "dispatch"
+            result = await asyncio.wait_for(self.supervisor.dispatch(operation, arguments), 85)
+            phase = "reply"
             await write_frame(writer, {"schema_version": 1, "request_id": request_id, "ok": True, "result": result})
             if operation != "logs":
                 LOGGER.info("runtime.command operation=%s request_id=%s", operation, request_id)
         except ConfigError as error:
+            if operation in {"start", "stop", "save_config", "delete_config"}:
+                LOGGER.warning("runtime.command_rejected operation=%s node_id=%s request_id=%s phase=%s code=%s",
+                               operation, node_id, request_id, phase, error.code)
             await self._error(writer, request_id, error)
-        except (KeyError, TypeError, ValueError):
-            await self._error(writer, request_id, ConfigError("invalid_message", "Runtime arguments are invalid."))
-        except Exception:
-            LOGGER.error("runtime.command_failed request_id=%s", request_id)
-            await self._error(writer, request_id, ConfigError("runtime_unavailable", "Runtime operation failed or completion is unknown; inspect status before retrying.", 503))
+        except Exception as error:
+            LOGGER.error(json.dumps({
+                "event_code": "runtime.command_failed", "operation": operation, "node_id": node_id,
+                "request_id": request_id, "phase": phase, **exception_details(error),
+            }, ensure_ascii=False))
+            message = f"Runtime operation failed. Check the system journal for request {request_id}."
+            await self._error(writer, request_id, ConfigError("runtime_unavailable", message, 503))
         finally:
             self.handlers.discard(task)
             writer.close()

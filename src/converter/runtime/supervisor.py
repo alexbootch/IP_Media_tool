@@ -19,6 +19,7 @@ from uuid import uuid4
 from converter.config.validation import ConfigError, canonical_id, decode_json
 from converter.node_sdk.worker import TRANSITIONS, utc_now
 from converter.node_sdk.media import validate_contract
+from converter.runtime.diagnostics import exception_details
 from converter.runtime.protocol import MAX_STATUS, encode_frame, envelope, read_frame, write_frame
 
 
@@ -51,6 +52,7 @@ class WorkerEntry:
     leases: list = field(default_factory=list)
     last_exit_code: int | None = None
     failure_reason: str | None = None
+    launch_stage: str = "config"
     media_pending: dict = field(default_factory=dict)
     media_changed: object = None
     contract_revisions: dict = field(default_factory=dict)
@@ -96,12 +98,15 @@ class Supervisor:
         if error is not None:
             message = error["message"].encode("utf-8")[:240].decode("utf-8", errors="ignore")
             event.update(error_code=error["code"], message=message)
+            if error.get("stage"):
+                event["stage"] = error["stage"]
         history = self.events.setdefault(node_id, deque(maxlen=LOG_EVENT_LIMIT))
         history.append(event)
         self.events.move_to_end(node_id)
         if len(self.events) > LOG_NODE_LIMIT:
             self.events.popitem(last=False)
-        LOGGER.log(logging.WARNING if error else logging.INFO, json.dumps(event, ensure_ascii=False))
+        journal_event = {**event, **error["details"]} if error and "details" in error else event
+        LOGGER.log(logging.WARNING if error else logging.INFO, json.dumps(journal_event, ensure_ascii=False))
 
     async def dispatch(self, operation, arguments):
         """Serialize lifecycle and writes so config edits cannot race a start."""
@@ -163,7 +168,7 @@ class Supervisor:
                     self._release(entry)
                     self.entries.pop(node_id, None)
                     if not isinstance(error, asyncio.CancelledError):
-                        self._log(entry, "worker.start_failed", error=self._launch_error(error))
+                        self._log(entry, "worker.start_failed", error=self._launch_error(error, entry.launch_stage))
                     raise
                 finally:
                     self.launch_tasks.pop(node_id, None)
@@ -199,6 +204,7 @@ class Supervisor:
 
     async def _preflight(self, entry):
         """Validate graph/dependencies and reserve declared DeckLink identities."""
+        entry.launch_stage = "config"
         config = entry.config
         self.modules.validate_config(config)
         inventory = await asyncio.to_thread(self.nodes.snapshot)
@@ -223,9 +229,11 @@ class Supervisor:
                 raise ConfigError("dependency_unavailable", "Unknown required DeckLink capability.", 409)
         if any(item["required"] and item["provider"] != "decklink" for item in requirements["capabilities"]):
             raise ConfigError("dependency_unavailable", "Required capabilities have no runtime readiness provider yet.", 409)
+        entry.launch_stage = "gst_registry"
         with tempfile.TemporaryDirectory(prefix="ip-media-worker-preflight-") as temporary:
             environment = {**os.environ, "GST_REGISTRY": str(Path(temporary) / "registry.bin")}
             for factory in requirements["gstreamer_factories"]:
+                entry.launch_stage = f"gst_probe:{factory}"
                 try:
                     await self._probe(["/usr/bin/gst-inspect-1.0", "--exists", factory], environment, 10, capture=False)
                 except FileNotFoundError:
@@ -242,12 +250,14 @@ class Supervisor:
             raise ConfigError("invalid_config", "DeckLink plugins must declare resource_bindings.")
         leases = []
         if bindings:
+            entry.launch_stage = "decklink_inventory"
             try:
                 payload = await self._probe([sys.executable, "-m", "converter.hardware.decklink.probe"], self._environment(), 60)
             except TimeoutError:
                 raise ConfigError("timeout", "DeckLink inventory probe timed out.", 409) from None
             except ConfigError:
                 raise ConfigError("dependency_unavailable", "DeckLink inventory probe failed. Check the DeckLink panel and service device access.", 409) from None
+            entry.launch_stage = "decklink_reservation"
             for binding in bindings:
                 resource_id = config["settings"].get(binding["setting"])
                 if not isinstance(resource_id, str) or not resource_id or len(resource_id) > 128:
@@ -266,13 +276,23 @@ class Supervisor:
             self.resource_owners["decklink:" + lease["resource_id"]] = config["id"]
 
     @staticmethod
-    def _launch_error(error):
-        """Describe supervisor launch failures without emitting process arguments or raw exceptions."""
+    def _launch_error(error, stage=None):
+        """Describe a failure at its operational stage without showing raw exception values."""
         if isinstance(error, ConfigError):
-            return {"code": error.code, "message": str(error)}
-        if isinstance(error, TimeoutError):
-            return {"code": "timeout", "message": "Worker launch exceeded its deadline."}
-        return {"code": "internal_error", "message": f"Worker launch failed ({type(error).__name__})."}
+            return {"code": error.code, "message": str(error), "stage": stage}
+        details = exception_details(error)
+        reason = details.get("reason")
+        filename = details.get("file")
+        location = details["frames"][-1] if details["frames"] else ""
+        message = details["exception"]
+        if reason:
+            message += f": {reason} (errno {details['errno']})"
+        if filename:
+            message += f" [{filename}]"
+        if location:
+            message += f" — {location}"
+        return {"code": "timeout" if isinstance(error, TimeoutError) else "internal_error",
+                "message": message, "stage": stage, "details": details}
 
     def _environment(self):
         """Pin child imports to this release rather than the mutable current symlink."""
@@ -299,6 +319,7 @@ class Supervisor:
 
     async def _spawn(self, entry):
         """Create a process group and private inherited FD, then send validated bootstrap."""
+        entry.launch_stage = "ipc_socket"
         parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
         entry.instance_id = str(uuid4())
         entry.last_worker_revision = 0
@@ -309,9 +330,12 @@ class Supervisor:
         entry.contract_revisions.clear()
         entry.status = {"schema_version": 1, "node_id": entry.config["id"], "node_type": entry.config["type"], "instance_id": entry.instance_id, "config_revision": entry.config["revision"], "status_revision": 1, "state": "starting", "updated_at": utc_now(), "error": None, "metrics": {}}
         try:
+            entry.launch_stage = "shm_directory"
             (self.media_root / entry.instance_id).mkdir(mode=0o700)
+            entry.launch_stage = "worker_process"
             entry.process = await asyncio.create_subprocess_exec(sys.executable, "-m", "converter.node_sdk.runner", "--ipc-fd", str(child.fileno()), pass_fds=(child.fileno(),), env=self._environment(), cwd=self.root, stdin=asyncio.subprocess.DEVNULL, start_new_session=True)
             child.close()
+            entry.launch_stage = "worker_bootstrap"
             reader, entry.writer = await asyncio.open_connection(sock=parent)
             bootstrap = {"schema_version": 1, "config": entry.config, "instance_id": entry.instance_id, "leases": entry.leases, "media_root": str(self.media_root)}
             self.modules.schemas.validate("worker-bootstrap", bootstrap)
@@ -544,7 +568,7 @@ class Supervisor:
             except Exception as error:
                 self._release(entry)
                 entry.desired_running = False
-                failure = self._launch_error(error)
+                failure = self._launch_error(error, entry.launch_stage)
                 self._log(entry, "worker.recovery_failed", error=failure)
                 self._terminal(entry, "error", {"code": "dependency_unavailable", "message": failure["message"], "retryable": False})
 

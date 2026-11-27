@@ -57,4 +57,6 @@ df -h /run
 
 Щоб побачити помилку в момент запуску SDI Input, виконай `sudo journalctl -u ip-media-tool-runtime -b -f -o cat`, потім натисни **Запустити** в графі.
 
+Якщо попередня версія повертала `Worker launch failed (FileNotFoundError)` до створення процесу, після оновлення перевір `systemctl show ip-media-tool-runtime -p PrivateTmp`. Очікуване значення — `PrivateTmp=yes`. Runtime використовує приватний тимчасовий каталог для перевірок GStreamer і DeckLink. Помилки запуску містять етап, а системний журнал — також тип винятку, errno та місце у коді.
+
 Вихід працює з одним embedded PCM-банком 48 кГц і 2, 8 або 16 каналами. SHM переносить сире відео й PCM. SDI ANC, RP188, субтитри та HDR side data поза межами цього маршруту. Точні режими, пропуски і довготривалий drift підтверджуються окремо на кожній комбінації обладнання та формату. [GStreamer DeckLink video input](https://gstreamer.freedesktop.org/documentation/decklink/decklinkvideosrc.html) · [GStreamer DeckLink video output](https://gstreamer.freedesktop.org/documentation/decklink/decklinkvideosink.html) · [GStreamer DeckLink audio output](https://gstreamer.freedesktop.org/documentation/decklink/decklinkaudiosink.html)

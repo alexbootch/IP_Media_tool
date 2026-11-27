@@ -331,7 +331,7 @@ export function initializeGraph({ request, role }) {
     const when = new Date(event.at).toLocaleString("uk-UA");
     const state = event.event_code.startsWith("worker.state.") ? event.event_code.slice("worker.state.".length) : "";
     const label = STATUS[state] ?? LOG_EVENTS[event.event_code] ?? event.event_code;
-    const error = event.error_code ? ` [${event.error_code}] ${event.message}` : "";
+    const error = event.error_code ? ` [${[event.error_code, event.stage].filter(Boolean).join(" · ")}] ${event.message}` : "";
     const exit = event.event_code === "worker.exited" && event.exit_code !== null ? ` (код ${event.exit_code})` : "";
     return `${when}  ${label}${exit}${error}`;
   }
