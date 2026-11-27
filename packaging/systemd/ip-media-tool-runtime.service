@@ -13,6 +13,7 @@ Environment=PYTHONPATH=/opt/ip-media-tool/current/src
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=IP_MEDIA_TOOL_NODE_DIR=/etc/ip-media-tool/nodes
 Environment=IP_MEDIA_TOOL_RUNTIME_SOCKET=/run/ip-media-tool/runtime.sock
+Environment=IP_MEDIA_TOOL_LOG_DIR=/opt/ip-media-tool/logs
 EnvironmentFile=-/etc/ip-media-tool/environment
 ExecStart=/usr/bin/python3 -m converter.runtime.service
 RuntimeDirectory=ip-media-tool
@@ -26,9 +27,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/etc/ip-media-tool/nodes /run/ip-media-tool
-StandardOutput=journal
-StandardError=journal
+ReadWritePaths=/etc/ip-media-tool/nodes /run/ip-media-tool /opt/ip-media-tool/logs
+StandardOutput=append:/opt/ip-media-tool/logs/runtime.log
+StandardError=inherit
 
 [Install]
 WantedBy=multi-user.target

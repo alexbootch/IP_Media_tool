@@ -19,11 +19,13 @@ ACTIVE_UNITS=()
 MANAGED_FILES=(
     /etc/systemd/system/ip-media-tool.service
     /etc/systemd/system/ip-media-tool-runtime.service
+    /etc/logrotate.d/ip-media-tool
     /usr/local/sbin/ip-media-tool-admin
     /usr/local/sbin/ip-media-tool-update
     /var/lib/ip-media-tool/installed-revision
 )
 CURRENT=/opt/ip-media-tool/current
+LOG_DIR=/opt/ip-media-tool/logs
 OLD_LINK=
 cleanup() {
     local status=$? path saved recovery_failed=0
@@ -100,6 +102,17 @@ if [[ -n "$REQUESTED_TAG" ]]; then [[ "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9
 if [[ -n "$REVISION" ]]; then [[ "$REVISION" =~ ^[0-9a-f]{40}$ ]] || die 'Invalid commit SHA.'; fi
 exec 9>/run/lock/ip-media-tool-install.lock
 flock -n 9 || die 'Another installation is running.'
+if ((!BASE_ONLY)); then
+    [[ ! -L /opt/ip-media-tool && ! -L "$LOG_DIR" ]] || die 'Expected real directories for installed application logs.'
+    install -d -m 0750 "$LOG_DIR"
+    [[ ! -L "$LOG_DIR/install.log" ]] || die 'Installation log must not be a symlink.'
+    if [[ ! -e "$LOG_DIR/install.log" ]]; then
+        install -m 0600 /dev/null "$LOG_DIR/install.log"
+    fi
+    [[ -f "$LOG_DIR/install.log" ]] || die 'Installation log must be a regular file.'
+    exec > >(tee -a "$LOG_DIR/install.log") 2>&1
+    printf '\nInstallation started at %s\n' "$(date -Is)"
+fi
 MISSING_BOOTSTRAP=()
 for package in curl ca-certificates python3; do
     if [[ "$(dpkg-query -W -f='${Status}' "$package" 2>/dev/null || true)" != 'install ok installed' ]]; then MISSING_BOOTSTRAP+=("$package"); fi
@@ -132,7 +145,7 @@ download "https://codeload.github.com/$REPOSITORY/tar.gz/$REVISION" "$WORK_DIR/s
 mkdir "$WORK_DIR/source"
 tar -xzf "$WORK_DIR/source.tar.gz" --strip-components=1 --no-same-owner --no-same-permissions -C "$WORK_DIR/source"
 SOURCE="$WORK_DIR/source"
-for file in src/converter/control/app.py frontend/web/login.html packaging/systemd/ip-media-tool.service packaging/systemd/ip-media-tool-runtime.service tools/install/ip-media-tool-admin.sh tools/install/ip-media-tool-update.sh; do
+for file in src/converter/control/app.py frontend/web/login.html packaging/systemd/ip-media-tool.service packaging/systemd/ip-media-tool-runtime.service packaging/logrotate/ip-media-tool tools/install/ip-media-tool-admin.sh tools/install/ip-media-tool-update.sh; do
     [[ -f "$SOURCE/$file" ]] || die "Selected commit does not contain $file. Use a commit/channel with the web application."
 done
 PREREQUISITE_STATUS=0
@@ -164,6 +177,18 @@ install -d -m 0755 /opt/ip-media-tool/releases /var/lib/ip-media-tool /etc/ip-me
 install -d -m 0700 -o ip-media-tool -g ip-media-tool /var/lib/ip-media-tool/security
 install -d -m 0700 -o ip-media-tool -g ip-media-tool /var/lib/ip-media-tool/hardware
 install -d -m 0700 -o ip-media-tool -g ip-media-tool /etc/ip-media-tool/nodes
+install -d -m 0750 -o root -g ip-media-tool "$LOG_DIR"
+for log_subdir in nodes audit; do
+    [[ ! -L "$LOG_DIR/$log_subdir" ]] || die 'Application log subdirectory must not be a symlink.'
+    install -d -m 0700 -o ip-media-tool -g ip-media-tool "$LOG_DIR/$log_subdir"
+done
+for service_log in runtime.log web.log; do
+    [[ ! -L "$LOG_DIR/$service_log" ]] || die 'Service log must not be a symlink.'
+    if [[ ! -e "$LOG_DIR/$service_log" ]]; then
+        install -m 0660 -o root -g ip-media-tool /dev/null "$LOG_DIR/$service_log"
+    fi
+    [[ -f "$LOG_DIR/$service_log" ]] || die 'Service log must be a regular file.'
+done
 # Supplementary device access without creating absent groups or changing driver/device permissions.
 for device_group in video render; do
     if getent group "$device_group" >/dev/null; then usermod -a -G "$device_group" ip-media-tool; fi
@@ -213,6 +238,7 @@ done
 FILES_CHANGED=1
 install -m 0644 "$SOURCE/packaging/systemd/ip-media-tool.service" /etc/systemd/system/ip-media-tool.service
 install -m 0644 "$SOURCE/packaging/systemd/ip-media-tool-runtime.service" /etc/systemd/system/ip-media-tool-runtime.service
+install -m 0644 "$SOURCE/packaging/logrotate/ip-media-tool" /etc/logrotate.d/ip-media-tool
 install_command "$SOURCE/tools/install/ip-media-tool-admin.sh" /usr/local/sbin/ip-media-tool-admin
 install_command "$SOURCE/tools/install/ip-media-tool-update.sh" /usr/local/sbin/ip-media-tool-update
 ln -s -- "$RELEASE_DIR" "$LINK_TEMP"
@@ -233,6 +259,7 @@ printf '%s\n' 'First setup: ip-media-tool-admin bootstrap' \
     'Manual start: sudo systemctl start ip-media-tool' \
     'Manual worker runtime: sudo systemctl start ip-media-tool-runtime (does not start nodes)' \
     'Browser: http://SERVER-IP:8080' \
+    'Logs: /opt/ip-media-tool/logs/' \
     'Updates: ip-media-tool-update (main by default; restores previously active services, without starting media routes)'
 if ((PREREQUISITE_STATUS != 0)); then
     printf 'Media prerequisites have unresolved checks (%s); web installation completed independently.\n' "$PREREQUISITE_STATUS" >&2

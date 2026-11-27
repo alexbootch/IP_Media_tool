@@ -24,7 +24,9 @@ from converter.runtime.client import RuntimeClient
 ROOT = Path(__file__).resolve().parents[3]
 WEB = ROOT / "frontend" / "web"
 COOKIE = "ip_media_tool_session"
-STORE = IdentityStore(os.environ.get("IP_MEDIA_TOOL_SECURITY_DIR", "/var/lib/ip-media-tool/security"))
+LOG_DIR = os.environ.get("IP_MEDIA_TOOL_LOG_DIR")
+STORE = IdentityStore(os.environ.get("IP_MEDIA_TOOL_SECURITY_DIR", "/var/lib/ip-media-tool/security"),
+                      audit_path=Path(LOG_DIR) / "audit" / "web.jsonl" if LOG_DIR else None)
 SECURE_COOKIE = os.environ.get("IP_MEDIA_TOOL_COOKIE_SECURE", "false").lower() == "true"
 ENCODERS = EncoderCapabilityManager(os.environ.get(
     "IP_MEDIA_TOOL_GPU_CACHE", "/var/lib/ip-media-tool/hardware/encoder-capabilities.json"

@@ -7,6 +7,8 @@ const STATUS = {
 const SVG_NS = "http://www.w3.org/2000/svg";
 const LIMIT = 100000;
 const LOG_EVENTS = {
+  "node.config_created": "Ноду створено",
+  "node.config_updated": "Конфігурацію збережено",
   "worker.start_requested": "Запит запуску",
   "worker.start_failed": "Запуск відхилено",
   "worker.spawned": "Процес створено",
@@ -346,7 +348,7 @@ export function initializeGraph({ request, role }) {
       const { events } = await request(`/api/nodes/${view.id}/logs`, { signal: AbortSignal.timeout(7000) });
       if (logView !== view || !ui.logDialog.open) return;
       const text = [...events].reverse().map(logLine).join("\n");
-      const next = text || "Подій запуску або зупинки ще немає.";
+      const next = text || "У журналі ще немає подій.";
       if (ui.logLines.textContent !== next) ui.logLines.textContent = next;
       showError(ui.logError);
     } catch (failure) {

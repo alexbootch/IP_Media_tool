@@ -49,7 +49,7 @@ Default — main, без нового release після кожної зміни
 - /etc/ip-media-tool/environment — bind/port/security directory і cookie settings; існуючий файл installer не переписує.
 - /var/lib/ip-media-tool/security/accounts.json — користувачі, Argon2id hashes, server-side sessions і login throttling; без DB. Одна атомарна JSON-транзакція, fsync, process/thread lock.
 - accounts.lock — Linux flock; lock не застосовується як постійна ознака зайнятості.
-- audit.jsonl — входи/відмови/виходи й адміністративні дії; ротація до п'яти резервних файлів по 2 MB. Паролі, cookie tokens і CSRF values до журналу не записуються.
+- `/opt/ip-media-tool/logs/audit/web.jsonl` і `admin.jsonl` — аудит вебсервісу та admin CLI з ротацією до п'яти резервних файлів по 2 MB. Попередня історія залишається в `/var/lib/ip-media-tool/security/audit.jsonl`.
 - Обліковий запис ip-media-tool запускає один Uvicorn worker. Code directories root-owned/read-only для сервісу; security directory доступний лише сервісу/root.
 
 Сесія — випадковий HttpOnly cookie, на сервері зберігається SHA-256 token, lifetime 8 годин; до 5 активних сесій користувача. Права перевіряються в API, а не тільки через приховування кнопок. Зміни ролі/активності, reset password і видалення відкликають сесії цільового користувача. Власний обліковий запис адміністратора не можна видалити/вимкнути/понизити через UI; останній активний admin захищений транзакційною перевіркою. Конкурентне редагування перевіряє revision і повертає 409 замість перезапису.
@@ -65,7 +65,7 @@ Login throttling обмежує невдалі спроби за IP і логі�
 ```bash
 ip-media-tool-admin reset-password --username admin
 sudo systemctl status ip-media-tool --no-pager
-sudo journalctl -u ip-media-tool -n 80 --no-pager
+sudo tail -n 80 /opt/ip-media-tool/logs/web.log
 ```
 
 Корумпований/невідомий accounts.json не скидається автоматично. Перед ручним відновленням state потрібно зупинити сервіс і зберегти захищену резервну копію. Відкат current code pointer не відкочує OS-пакети чи акаунти. На цьому етапі схема accounts.json одна, автоматичні міграції ще не додані.

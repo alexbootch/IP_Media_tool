@@ -1,0 +1,8 @@
+/opt/ip-media-tool/logs/runtime.log /opt/ip-media-tool/logs/web.log /opt/ip-media-tool/logs/install.log /opt/ip-media-tool/logs/update.log {
+    size 10M
+    rotate 5
+    missingok
+    notifempty
+    compress
+    copytruncate
+}

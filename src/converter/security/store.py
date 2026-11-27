@@ -47,17 +47,18 @@ def validate_password(password):
 
 
 class IdentityStore:
-    def __init__(self, directory, session_seconds=28800):
+    def __init__(self, directory, session_seconds=28800, *, audit_path=None):
         self.directory = Path(directory)
         self.path = self.directory / "accounts.json"
+        self.audit_path = Path(audit_path) if audit_path is not None else self.directory / "audit.jsonl"
         self.lock = RLock()
         self.session_seconds = session_seconds
-        self.audit = logging.getLogger("ip-media-tool.audit." + hashlib.sha256(str(self.directory.resolve()).encode()).hexdigest()[:16])
+        self.audit = logging.getLogger("ip-media-tool.audit." + hashlib.sha256(str(self.audit_path.resolve()).encode()).hexdigest()[:16])
 
     def initialize(self):
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         if not self.audit.handlers:
-            audit_path = self.directory / "audit.jsonl"
+            audit_path = self.audit_path
             fd = os.open(audit_path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
             os.close(fd)
             handler = RotatingFileHandler(audit_path, maxBytes=2_000_000, backupCount=5, encoding="utf-8")

@@ -35,6 +35,15 @@ if [[ "$MODE" == update ]] && ((EUID != 0)); then
     if ((BASE_ONLY)); then ARGS+=(--base-only); fi
     exec sudo -- /usr/local/sbin/ip-media-tool-update "${ARGS[@]}"
 fi
+if [[ "$MODE" == update && -d /opt/ip-media-tool/logs && ! -L /opt/ip-media-tool/logs ]]; then
+    [[ ! -L /opt/ip-media-tool/logs/update.log ]] || die 'Update log must not be a symlink.'
+    if [[ ! -e /opt/ip-media-tool/logs/update.log ]]; then
+        install -m 0600 /dev/null /opt/ip-media-tool/logs/update.log
+    fi
+    [[ -f /opt/ip-media-tool/logs/update.log ]] || die 'Update log must be a regular file.'
+    exec > >(tee -a /opt/ip-media-tool/logs/update.log) 2>&1
+    printf '\nUpdate started at %s\n' "$(date -Is)"
+fi
 command -v curl >/dev/null || die 'curl is missing. Rerun the public installer.'
 command -v /usr/bin/python3 >/dev/null || die 'System Python is missing. Rerun the public installer.'
 WORK_DIR=$(mktemp -d /tmp/ip-media-tool-update.XXXXXXXX)

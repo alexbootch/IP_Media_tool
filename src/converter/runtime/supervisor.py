@@ -20,6 +20,7 @@ from converter.config.validation import ConfigError, canonical_id, decode_json
 from converter.node_sdk.worker import TRANSITIONS, utc_now
 from converter.node_sdk.media import validate_contract
 from converter.runtime.diagnostics import exception_details
+from converter.runtime.node_logs import NodeLogs
 from converter.runtime.protocol import MAX_STATUS, encode_frame, envelope, read_frame, write_frame
 
 
@@ -61,7 +62,7 @@ class WorkerEntry:
 class Supervisor:
     """Own all starts/stops/config mutations; never restore desired-running at boot."""
 
-    def __init__(self, root, modules, nodes, media_root=None):
+    def __init__(self, root, modules, nodes, media_root=None, log_dir=None):
         """Bind this daemon to one immutable release and the shared config store."""
         self.root, self.modules, self.nodes = Path(root).resolve(), modules, nodes
         self.entries = {}
@@ -72,6 +73,7 @@ class Supervisor:
         self.media_root = Path(media_root) if media_root is not None else None
         self.contracts = {}
         self.events = OrderedDict()
+        self.node_logs = NodeLogs(log_dir) if log_dir is not None else None
 
     def snapshot(self, node_id=None):
         """Report absent workers as stopped without inventing an instance UUID."""
@@ -87,6 +89,13 @@ class Supervisor:
     def _lock_for(self, node_id):
         """Serialize one node without blocking stop commands for unrelated workers."""
         return self.control_locks.setdefault(node_id, asyncio.Lock())
+
+    async def initialize_logs(self):
+        """Provision named files for the configurations already present after an update."""
+        if self.node_logs is not None:
+            inventory = await asyncio.to_thread(self.nodes.snapshot)
+            for config in inventory["nodes"]:
+                self.node_logs.prepare(config)
 
     def _log(self, entry, event_code, *, error=None):
         """Retain bounded lifecycle events and mirror them to the system journal."""
@@ -107,6 +116,8 @@ class Supervisor:
             self.events.popitem(last=False)
         journal_event = {**event, **error["details"]} if error and "details" in error else event
         LOGGER.log(logging.WARNING if error else logging.INFO, json.dumps(journal_event, ensure_ascii=False))
+        if self.node_logs is not None:
+            self.node_logs.write(entry.config, journal_event)
 
     async def dispatch(self, operation, arguments):
         """Serialize lifecycle and writes so config edits cannot race a start."""
@@ -129,7 +140,15 @@ class Supervisor:
             return self.snapshot(arguments["node_id"])
         if operation == "logs":
             node_id = canonical_id(arguments["node_id"])
-            return {"events": list(self.events.get(node_id, ()))}
+            persisted = []
+            if self.node_logs is not None:
+                try:
+                    persisted = self.node_logs.read(node_id, LOG_EVENT_LIMIT)
+                except OSError:
+                    LOGGER.warning("node.log_read_failed node_id=%s", node_id)
+            events = {(event["at"], event["event_code"]): event for event in persisted}
+            events.update({(event["at"], event["event_code"]): event for event in self.events.get(node_id, ())})
+            return {"events": sorted(events.values(), key=lambda event: event["at"])[-LOG_EVENT_LIMIT:]}
         config_argument = arguments.get("config")
         node_id = canonical_id(config_argument.get("id") if operation == "save_config" and isinstance(config_argument, dict) else arguments.get("node_id"))
         if operation == "stop":
@@ -187,9 +206,14 @@ class Supervisor:
                 if entry is not None and (entry.desired_running or entry.process is not None or (entry.restart_task is not None and not entry.restart_task.done())):
                     raise ConfigError("resource_busy", "Stop this node before editing or deleting its config.", 409)
                 if operation == "save_config":
-                    return await self._store_write(self.nodes.save, config, arguments["expected_revision"])
+                    result = await self._store_write(self.nodes.save, config, arguments["expected_revision"])
+                    event_code = "node.config_updated" if arguments["expected_revision"] else "node.config_created"
+                    self._log(WorkerEntry(config=result["node"]), event_code)
+                    return result
                 await self._store_write(self.nodes.delete, node_id, arguments["expected_revision"])
                 self.events.pop(node_id, None)
+                if self.node_logs is not None:
+                    self.node_logs.paths.pop(node_id, None)
                 return {"deleted": node_id}
             raise ConfigError("invalid_message", "Unsupported runtime operation.")
 

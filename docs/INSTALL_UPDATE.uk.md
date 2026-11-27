@@ -27,6 +27,25 @@ Windows/VS Code -> ручний commit/push -> public main -> ручний updat
 
 Драйвери DeckLink/NVIDIA не встановлюються й не замінюються. Невирішені NDI/media checks не блокують web control plane. Перший startup і admin bootstrap — явні дії користувача за [інструкцією](WEB_AUTH.uk.md). Наступний ручний update перезапускає лише вже активний web service. Фонові updates/media startup відсутні.
 
+## Журнали
+
+Спільна тека `/opt/ip-media-tool/logs/` лежить поруч із `current` і зберігається під час оновлень.
+
+| Файл | Вміст |
+| --- | --- |
+| `runtime.log` | Runtime, запуск воркерів і системні повідомлення GStreamer/DeckLink |
+| `web.log` | Вебсервіс, API і перевірки обладнання |
+| `nodes/<назва>--<UUID>.log` | Події конкретної ноди у форматі JSON Lines. Перейменування ноди переносить її журнал і резервні файли |
+| `audit/web.jsonl`, `audit/admin.jsonl` | Події авторизації, адміністрування та керування з браузера чи консолі |
+| `install.log`, `update.log` | Вивід повної інсталяції та ручного оновлення |
+
+```bash
+sudo ls -l /opt/ip-media-tool/logs/nodes/
+sudo tail -F /opt/ip-media-tool/logs/runtime.log
+```
+
+У браузері кнопка **Журнал** показує останні події ноди з її файла. Видалення ноди залишає її історію на диску. Файли нод і аудиту ротуються застосунком. Для файлів сервісів, інсталяції та оновлень застосовується системний logrotate. Попередні записи залишаються в системному журналі та у старому файлі аудиту `/var/lib/ip-media-tool/security/audit.jsonl`.
+
 ## Подальші вимоги до stable delivery
 
 Це майбутні задачі, а не готові можливості поточного installer:

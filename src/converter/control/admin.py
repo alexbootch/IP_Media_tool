@@ -3,6 +3,7 @@
 import argparse
 import getpass
 import os
+from pathlib import Path
 import sys
 
 from converter.security.store import AccessError, IdentityStore, validate_password
@@ -13,7 +14,9 @@ def main():
     parser.add_argument("action", choices=["bootstrap", "reset-password"])
     parser.add_argument("--username")
     args = parser.parse_args()
-    store = IdentityStore(os.environ.get("IP_MEDIA_TOOL_SECURITY_DIR", "/var/lib/ip-media-tool/security"))
+    log_dir = os.environ.get("IP_MEDIA_TOOL_LOG_DIR")
+    store = IdentityStore(os.environ.get("IP_MEDIA_TOOL_SECURITY_DIR", "/var/lib/ip-media-tool/security"),
+                          audit_path=Path(log_dir) / "audit" / "admin.jsonl" if log_dir else None)
     store.initialize()
     try:
         if args.action == "bootstrap" and store.ready():

@@ -16,7 +16,7 @@ Runtime закріплює Python imports і working directory за реальн
 
 Context надає detached config/status snapshots, node_id/instance_id, immutable lease descriptors, cancellation Event, logger.event(event_code), publish_status(status), set_state(state, error=None). Status identity/config revision незмінні. SDK сам збільшує status_revision, задає updated_at та перевіряє схему й переходи станів. Heartbeat не повинен бути сигналом апаратної готовності.
 
-Логи lifecycle містять node_id/type/instance/config revision, exit code/retry count у supervisor; SDK logger приймає тільки event codes, не довільні settings/secret values. Plugin не повинен друкувати credentials самостійно. Журнали — `journalctl -u ip-media-tool-runtime`.
+Події lifecycle містять node ID, тип, instance ID, revision, код виходу й кількість спроб. SDK logger приймає коди подій. Журнал сервісу — `/opt/ip-media-tool/logs/runtime.log`. Журнал конкретної ноди — `/opt/ip-media-tool/logs/nodes/<назва>--<UUID>.log`. [Перелік журналів](INSTALL_UPDATE.uk.md#журнали)
 
 ## IPC
 
