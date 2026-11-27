@@ -18,6 +18,8 @@ ip-media-tool-update
 
 Windows/VS Code -> ручний commit/push -> public main -> ручний updater на Ubuntu. На сервері немає Git login, PAT чи deploy keys. Новий release після кожної зміни не потрібний. Updater фіксує SHA, завантажує installer і archive саме цього commit. Stable/version — опціональні режими.
 
+Після успішного оновлення в `/opt/ip-media-tool/releases/` залишається каталог активного SHA. Попередній каталог потрібен під час перемикання і перевірки готовності сервісів для відкату в разі збою. Очищення охоплює лише розпізнані каталоги релізів. Якщо раніше встановлена версія знову знадобиться, завантаж її через updater із відповідним тегом.
+
 ## Що встановлюється
 
 - Python, GStreamer/GI та OS packages з package list.
@@ -25,11 +27,13 @@ Windows/VS Code -> ручний commit/push -> public main -> ручний updat
 - Root-owned code revision, systemd unit, окремий user ip-media-tool, admin CLI та updater.
 - Захищений каталог accounts/sessions/audit; існуючі environment і акаунти зберігаються.
 
-Драйвери DeckLink/NVIDIA не встановлюються й не замінюються. Невирішені NDI/media checks не блокують web control plane. Перший startup і admin bootstrap — явні дії користувача за [інструкцією](WEB_AUTH.uk.md). Наступний ручний update перезапускає лише вже активний web service. Фонові updates/media startup відсутні.
+Драйвери DeckLink/NVIDIA встановлює користувач. Перший startup і admin bootstrap — явні дії за [інструкцією](WEB_AUTH.uk.md). Ручне оновлення відновлює сервіси, які були активні. Медіамаршрути запускаються окремо з графа.
 
 ## Журнали
 
 Спільна тека `/opt/ip-media-tool/logs/` лежить поруч із `current` і зберігається під час оновлень.
+
+Група `ip-media-tool-logs` має доступ до читання журналів. Інсталятор додає до неї користувача, який виконав оновлення через `sudo`. Щоб файловий менеджер або SFTP отримав нову групу, відкрий новий SSH-сеанс. Якщо оновлення запускалося безпосередньо з облікового запису root, групу можна додати командою `sudo usermod -aG ip-media-tool-logs ІМʼЯ_КОРИСТУВАЧА`.
 
 | Файл | Вміст |
 | --- | --- |
@@ -40,11 +44,21 @@ Windows/VS Code -> ручний commit/push -> public main -> ручний updat
 | `install.log`, `update.log` | Вивід повної інсталяції та ручного оновлення |
 
 ```bash
-sudo ls -l /opt/ip-media-tool/logs/nodes/
-sudo tail -F /opt/ip-media-tool/logs/runtime.log
+ls -l /opt/ip-media-tool/logs/nodes/
+tail -F /opt/ip-media-tool/logs/runtime.log
 ```
 
 У браузері кнопка **Журнал** показує останні події ноди з її файла. Видалення ноди залишає її історію на диску. Файли нод і аудиту ротуються застосунком. Для файлів сервісів, інсталяції та оновлень застосовується системний logrotate. Попередні записи залишаються в системному журналі та у старому файлі аудиту `/var/lib/ip-media-tool/security/audit.jsonl`.
+
+## Старі каталоги на сервері
+
+Поточні шляхи застосунку — `/opt/ip-media-tool`, `/etc/ip-media-tool` і `/var/lib/ip-media-tool`. При створенні сервісного користувача інсталятор задає домашній каталог `/var/lib/ip-media-tool`. Якщо на сервері є `/opt/converter` або `/home/ip-media-tool`, перевір їх окремо перед архівуванням чи видаленням:
+
+```bash
+getent passwd ip-media-tool
+sudo grep -RIlF -- '/opt/converter' /etc/systemd/system /usr/lib/systemd/system
+sudo ls -la /opt/converter /home/ip-media-tool
+```
 
 ## Подальші вимоги до stable delivery
 

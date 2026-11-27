@@ -1,6 +1,7 @@
 # Runtime prerequisites for Ubuntu 24.04 LTS.
 # Distribution packages only; no drivers, build tools or application services.
 # Exact release pins will be provided by a future validated release manifest.
+acl
 ca-certificates
 curl
 pciutils

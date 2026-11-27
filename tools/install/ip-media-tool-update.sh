@@ -41,6 +41,9 @@ if [[ "$MODE" == update && -d /opt/ip-media-tool/logs && ! -L /opt/ip-media-tool
         install -m 0600 /dev/null /opt/ip-media-tool/logs/update.log
     fi
     [[ -f /opt/ip-media-tool/logs/update.log ]] || die 'Update log must be a regular file.'
+    if command -v setfacl >/dev/null && getent group ip-media-tool-logs >/dev/null; then
+        setfacl -m g:ip-media-tool-logs:r -- /opt/ip-media-tool/logs/update.log
+    fi
     exec > >(tee -a /opt/ip-media-tool/logs/update.log) 2>&1
     printf '\nUpdate started at %s\n' "$(date -Is)"
 fi

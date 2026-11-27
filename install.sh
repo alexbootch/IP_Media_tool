@@ -15,6 +15,9 @@ STATE_TEMP=
 ROLLBACK=0
 FILES_CHANGED=0
 POINTER_SWITCHED=0
+STAGING=
+CREATED_RELEASE=
+INSTALL_COMMITTED=0
 ACTIVE_UNITS=()
 MANAGED_FILES=(
     /etc/systemd/system/ip-media-tool.service
@@ -25,8 +28,73 @@ MANAGED_FILES=(
     /var/lib/ip-media-tool/installed-revision
 )
 CURRENT=/opt/ip-media-tool/current
+RELEASE_ROOT=/opt/ip-media-tool/releases
 LOG_DIR=/opt/ip-media-tool/logs
+LOG_GROUP=ip-media-tool-logs
 OLD_LINK=
+
+remove_inactive_release() {
+    local candidate=$1 name resolved active mounts target
+    name=${candidate##*/}
+    [[ "$name" =~ ^[0-9a-f]{40}$ && "$candidate" == "$RELEASE_ROOT/$name" ]] || return 1
+    [[ -d "$candidate" && ! -L "$candidate" ]] || return 1
+    resolved=$(readlink -e -- "$candidate") || return 1
+    active=$(readlink -e -- "$CURRENT") || active=
+    [[ "$resolved" == "$candidate" && "$candidate" != "$active" ]] || return 1
+    [[ "$(stat -c '%u' -- "$candidate")" == 0 ]] || return 1
+    [[ -f "$candidate/src/converter/control/app.py" && -f "$candidate/packaging/systemd/ip-media-tool.service" ]] || return 1
+    mounts=$(findmnt -ln -o TARGET) || return 1
+    while IFS= read -r target; do
+        [[ "$target" != "$candidate" && "$target" != "$candidate/"* ]] || return 1
+    done <<< "$mounts"
+    rm -rf --one-file-system -- "$candidate" && [[ ! -e "$candidate" ]]
+}
+
+prune_releases() {
+    local candidate
+    [[ "$(readlink -e -- "$CURRENT")" == "$RELEASE_DIR" ]] || return 1
+    for candidate in "$RELEASE_ROOT"/*; do
+        [[ "${candidate##*/}" =~ ^[0-9a-f]{40}$ && "$candidate" != "$RELEASE_DIR" ]] || continue
+        if remove_inactive_release "$candidate"; then
+            printf 'Removed inactive release: %s\n' "${candidate##*/}"
+        else
+            printf 'WARNING: could not remove inactive release: %s\n' "$candidate" >&2
+        fi
+    done
+}
+
+wait_for_service() {
+    local unit=$1 deadline=$((SECONDS + 25)) pid setting host port socket response
+    while ((SECONDS < deadline)); do
+        if systemctl is-active --quiet "$unit"; then
+            pid=$(systemctl show --property=MainPID --value "$unit") || pid=
+            if [[ "$pid" =~ ^[1-9][0-9]*$ && -r "/proc/$pid/environ" ]]; then
+                host=0.0.0.0 port=8080 socket=/run/ip-media-tool/runtime.sock
+                while IFS= read -r -d '' setting; do
+                    case "$setting" in
+                        IP_MEDIA_TOOL_BIND=*) host=${setting#*=} ;;
+                        IP_MEDIA_TOOL_PORT=*) port=${setting#*=} ;;
+                        IP_MEDIA_TOOL_RUNTIME_SOCKET=*) socket=${setting#*=} ;;
+                    esac
+                done < "/proc/$pid/environ"
+                if [[ "$unit" == ip-media-tool-runtime.service ]]; then
+                    if [[ -S "$socket" ]]; then return 0; fi
+                else
+                    case "$host" in
+                        0.0.0.0) host=127.0.0.1 ;;
+                        ::) host='[::1]' ;;
+                        *:*) host="[$host]" ;;
+                    esac
+                    if response=$(curl -fSs --noproxy '*' --max-time 2 "http://$host:$port/healthz" 2>/dev/null) &&
+                       [[ "$response" == *'"application":"IP_Media_tool"'* ]]; then return 0; fi
+                fi
+            fi
+        fi
+        sleep 1
+    done
+    return 1
+}
+
 cleanup() {
     local status=$? path saved recovery_failed=0
     trap - EXIT
@@ -62,6 +130,13 @@ cleanup() {
         if ((recovery_failed)); then
             printf 'Automatic recovery was incomplete. Check ip-media-tool and ip-media-tool-runtime in systemctl.\n' >&2
         fi
+    fi
+    if (( ! INSTALL_COMMITTED && ! recovery_failed )) && [[ -n "$CREATED_RELEASE" ]]; then
+        remove_inactive_release "$CREATED_RELEASE" || true
+    fi
+    if [[ -n "$STAGING" && ! -L "$STAGING" && "$STAGING" == "$RELEASE_ROOT"/.staging.* ]] &&
+       [[ "$(readlink -e -- "$STAGING")" == "$STAGING" ]]; then
+        rm -rf --one-file-system -- "$STAGING"
     fi
     if [[ -n "$LINK_TEMP" ]]; then rm -f -- "$LINK_TEMP" "$LINK_TEMP.rollback"; fi
     if [[ -n "$STATE_TEMP" ]]; then rm -f -- "$STATE_TEMP"; fi
@@ -173,14 +248,20 @@ if ! id ip-media-tool >/dev/null 2>&1; then
     useradd --system --user-group --home-dir /var/lib/ip-media-tool --no-create-home --shell /usr/sbin/nologin ip-media-tool
 fi
 [[ "$(id -u ip-media-tool)" != 0 ]] || die 'Service user must not be root.'
-install -d -m 0755 /opt/ip-media-tool/releases /var/lib/ip-media-tool /etc/ip-media-tool
+[[ ! -L "$RELEASE_ROOT" ]] || die 'Release storage must be a real directory.'
+install -d -m 0755 "$RELEASE_ROOT" /var/lib/ip-media-tool /etc/ip-media-tool
+[[ "$(readlink -e -- "$RELEASE_ROOT")" == "$RELEASE_ROOT" && "$(stat -c '%u' -- "$RELEASE_ROOT")" == 0 ]] ||
+    die 'Release storage must be owned by root at /opt/ip-media-tool/releases.'
 install -d -m 0700 -o ip-media-tool -g ip-media-tool /var/lib/ip-media-tool/security
 install -d -m 0700 -o ip-media-tool -g ip-media-tool /var/lib/ip-media-tool/hardware
 install -d -m 0700 -o ip-media-tool -g ip-media-tool /etc/ip-media-tool/nodes
 install -d -m 0750 -o root -g ip-media-tool "$LOG_DIR"
+getent group "$LOG_GROUP" >/dev/null || groupadd --system -- "$LOG_GROUP"
+setfacl -m "g:$LOG_GROUP:rx" -- "$LOG_DIR"
 for log_subdir in nodes audit; do
     [[ ! -L "$LOG_DIR/$log_subdir" ]] || die 'Application log subdirectory must not be a symlink.'
     install -d -m 0700 -o ip-media-tool -g ip-media-tool "$LOG_DIR/$log_subdir"
+    setfacl -m "g:$LOG_GROUP:rx,d:g:$LOG_GROUP:rx" -- "$LOG_DIR/$log_subdir"
 done
 for service_log in runtime.log web.log; do
     [[ ! -L "$LOG_DIR/$service_log" ]] || die 'Service log must not be a symlink.'
@@ -189,6 +270,17 @@ for service_log in runtime.log web.log; do
     fi
     [[ -f "$LOG_DIR/$service_log" ]] || die 'Service log must be a regular file.'
 done
+find -P "$LOG_DIR" -maxdepth 1 -type f -exec setfacl -m "g:$LOG_GROUP:r" -- {} +
+runuser -u ip-media-tool -- find -P "$LOG_DIR/nodes" "$LOG_DIR/audit" -maxdepth 1 -type f \
+    -exec setfacl -m "g:$LOG_GROUP:r" -- {} +
+if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != root && "${SUDO_USER}" != ip-media-tool &&
+      "${SUDO_UID:-}" =~ ^[1-9][0-9]*$ ]]; then
+    operator_uid=$(id -u -- "$SUDO_USER" 2>/dev/null) || operator_uid=
+    if [[ "$operator_uid" == "$SUDO_UID" && " $(id -nG -- "$SUDO_USER") " != *" $LOG_GROUP "* ]]; then
+        usermod -a -G "$LOG_GROUP" -- "$SUDO_USER" ||
+            printf 'WARNING: could not grant log access to %s. Check group %s.\n' "$SUDO_USER" "$LOG_GROUP" >&2
+    fi
+fi
 # Supplementary device access without creating absent groups or changing driver/device permissions.
 for device_group in video render; do
     if getent group "$device_group" >/dev/null; then usermod -a -G "$device_group" ip-media-tool; fi
@@ -203,12 +295,14 @@ ENVIRONMENT
     chown root:ip-media-tool /etc/ip-media-tool/environment
     chmod 0640 /etc/ip-media-tool/environment
 fi
-RELEASE_DIR="/opt/ip-media-tool/releases/$REVISION"
+RELEASE_DIR="$RELEASE_ROOT/$REVISION"
+[[ ! -L "$RELEASE_DIR" ]] || die 'Selected release directory must not be a symlink.'
 if [[ ! -d "$RELEASE_DIR" ]]; then
-    STAGING=$(mktemp -d /opt/ip-media-tool/releases/.staging.XXXXXXXX)
+    STAGING=$(mktemp -d "$RELEASE_ROOT/.staging.XXXXXXXX")
     cp -a -- "$SOURCE/." "$STAGING/"
     chmod -R u=rwX,go=rX "$STAGING"
-    mv -- "$STAGING" "$RELEASE_DIR"
+    mv -T -- "$STAGING" "$RELEASE_DIR"
+    CREATED_RELEASE=$RELEASE_DIR STAGING=
 fi
 if [[ -L "$CURRENT" ]]; then
     OLD_LINK=$(readlink -- "$CURRENT")
@@ -250,10 +344,11 @@ for unit in "${ACTIVE_UNITS[@]}"; do
     systemctl start "$unit" || die "Could not start $unit."
 done
 for unit in "${ACTIVE_UNITS[@]}"; do
-    systemctl is-active --quiet "$unit" || die "$unit did not stay active."
+    wait_for_service "$unit" || die "$unit did not become ready."
 done
 mv -f -- "$STATE_TEMP" /var/lib/ip-media-tool/installed-revision
-ROLLBACK=0
+ROLLBACK=0 INSTALL_COMMITTED=1
+prune_releases || printf 'WARNING: release cleanup skipped because current changed.\n' >&2
 printf '\nIP Media Tool web application installed.\n'
 printf '%s\n' 'First setup: ip-media-tool-admin bootstrap' \
     'Manual start: sudo systemctl start ip-media-tool' \

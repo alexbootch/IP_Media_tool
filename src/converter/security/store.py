@@ -51,6 +51,7 @@ class IdentityStore:
         self.directory = Path(directory)
         self.path = self.directory / "accounts.json"
         self.audit_path = Path(audit_path) if audit_path is not None else self.directory / "audit.jsonl"
+        self.audit_mode = 0o640 if audit_path is not None else 0o600
         self.lock = RLock()
         self.session_seconds = session_seconds
         self.audit = logging.getLogger("ip-media-tool.audit." + hashlib.sha256(str(self.audit_path.resolve()).encode()).hexdigest()[:16])
@@ -59,7 +60,7 @@ class IdentityStore:
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         if not self.audit.handlers:
             audit_path = self.audit_path
-            fd = os.open(audit_path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
+            fd = os.open(audit_path, os.O_CREAT | os.O_APPEND | os.O_WRONLY, self.audit_mode)
             os.close(fd)
             handler = RotatingFileHandler(audit_path, maxBytes=2_000_000, backupCount=5, encoding="utf-8")
             handler.setFormatter(logging.Formatter("%(message)s"))
