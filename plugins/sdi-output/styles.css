@@ -2,3 +2,9 @@
   display: grid;
   gap: var(--node-field-gap);
 }
+[data-node-type="sdi-output"] .node-sdi-output__card {
+  display: grid;
+  gap: 5px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--line);
+}

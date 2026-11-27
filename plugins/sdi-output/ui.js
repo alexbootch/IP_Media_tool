@@ -1,4 +1,19 @@
-import { appendField, selectField, settingsController } from "/assets/node-fields.js";
+import { appendField, deckLinkCardControls, selectField, settingsController } from "/assets/node-fields.js";
+
+/** Mount the physical port, SDI mode and pixel format controls on the output card. */
+export function mountCard(container, { config, saveSettings }) {
+  const fields = document.createElement("div");
+  fields.className = "node-sdi-output__card";
+  container.append(fields);
+  const mode = document.createElement("input");
+  mode.value = config.settings.mode;
+  mode.maxLength = 32;
+  appendField(fields, "Режим SDI", mode, { readOnly: true });
+  const format = appendField(fields, "Відео",
+    selectField([["UYVY", "UYVY · 8 біт"], ["v210", "v210 · 10 біт"]], config.settings.video_format ?? "UYVY"), { readOnly: true });
+  return deckLinkCardControls(container, fields, { config, direction: "output", saveSettings,
+    controls: [{ input: mode, key: "mode" }, { input: format, key: "video_format", fallback: "UYVY" }] });
+}
 
 /** Build one SDI playout form and return its settings collector. */
 export function mount(container, { readOnly }) {

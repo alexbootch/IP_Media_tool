@@ -34,6 +34,8 @@ starting / waiting_source / waiting_signal / running / error → stopping → st
 
 ## JavaScript UI
 
+Для коротких налаштувань на картці модуль може експортувати `mountCard(container, { config, saveSettings })`. Controller картки має `updateEditable(allowed)`, `updateCapabilities(snapshot)` і `unmount()`. Метод `saveSettings(patch)` повертає `Promise<boolean>` і зберігає зміни через той самий writer із перевіркою ревізії, що й діалог. Поля активного воркера доступні для перегляду.
+
 `ui.js` експортує `mount(container, context)`. Повернене значення — controller з методами `updateConfig(config)`, `updateStatus(status)`, `updateCapabilities(capabilities)` та `unmount()`. Кожна функція/метод має JSDoc. Context містить node ID і API оболонки; жодного імпорту UI іншої ноди.
 
 `mount` повертає controller синхронно, а асинхронні запити обробляються з явним станом завантаження/помилки. `unmount` ідемпотентно знімає listeners, скасовує власні запити й таймери. Оновлення старого request не змінює новий/видалений instance. Методи update не переписують незбережені поля форми.

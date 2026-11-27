@@ -77,6 +77,7 @@ async function navigate(page) {
   if (!session) return;
   if (page === "users" && session.user.role !== "admin") return;
   $("#workspace-view").hidden = page !== "workspace";
+  $("#graph-sidebar").hidden = page !== "workspace";
   $("#users-view").hidden = page !== "users";
   for (const name of ["workspace", "users"]) {
     const active = page === name;
@@ -182,7 +183,7 @@ async function initialize() {
     account();
     initializeGpuPanel({ request, role: session.user.role });
     initializeDeckLinkPanel({ request, role: session.user.role });
-    initializeGraph({ request, role: session.user.role });
+    initializeGraph({ request, role: session.user.role, notify: toast });
     $("#main-content").setAttribute("aria-busy", "false");
   } catch (failure) { toast(failure.message, true); }
 }

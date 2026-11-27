@@ -88,3 +88,56 @@ export function settingsController(container, fields, { port, direction, readSet
     },
   };
 }
+
+/** Bind common DeckLink inline controls to the shell's revision-checked config writer. */
+export function deckLinkCardControls(container, fields, { config, direction, saveSettings, controls }) {
+  const port = appendField(fields, "DeckLink", document.createElement("select"), { readOnly: true });
+  fields.prepend(port.parentElement);
+  updateDeckLinkPorts(port, direction, undefined, config.settings.persistent_id);
+  const bindings = [{ input: port, key: "persistent_id" }, ...controls];
+  let editable = false;
+  let saving = false;
+  let mounted = true;
+
+  /** Respect permissions and serialize inline changes through the same graph writer. */
+  function updateEditable(allowed) {
+    editable = allowed;
+    for (const { input } of bindings) input.disabled = !editable || saving;
+  }
+
+  /** Save one field once it changes, reverting the local control on a rejected write. */
+  async function changeField(event) {
+    const input = event.currentTarget;
+    const { key, parse = String, fallback } = bindings.find((binding) => binding.input === input);
+    const saved = config.settings[key] ?? fallback ?? "";
+    const value = parse(input.value.trim());
+    if (input.value.trim() === "" || value === saved || saving || !editable) {
+      input.value = String(saved);
+      return;
+    }
+    saving = true;
+    updateEditable(editable);
+    try {
+      if (!await saveSettings({ [key]: value }) && mounted) input.value = String(saved);
+    } finally {
+      saving = false;
+      if (mounted) updateEditable(editable);
+    }
+  }
+
+  for (const { input } of bindings) input.addEventListener("change", changeField);
+  const controller = {
+    updateEditable,
+    /** Present the supported physical ports for this card's direction. */
+    updateCapabilities(snapshot) {
+      updateDeckLinkPorts(port, direction, snapshot, port.value);
+    },
+    /** Detach only this card's listeners when its revision changes or it is removed. */
+    unmount() {
+      mounted = false;
+      for (const { input } of bindings) input.removeEventListener("change", changeField);
+      container.replaceChildren();
+    },
+  };
+  return controller;
+}

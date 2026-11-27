@@ -17,6 +17,21 @@
         <button class="nav-item active" id="workspace-nav" type="button" aria-current="page"><span aria-hidden="true">▦</span>Робочий простір</button>
         <button class="nav-item" id="users-nav" type="button" hidden><span aria-hidden="true">♙</span>Користувачі</button>
       </nav>
+      <div id="graph-sidebar">
+        <details class="node-bank" id="node-bank" open>
+          <summary aria-label="Банк нод"><span aria-hidden="true">▤</span><span>Банк нод</span></summary>
+          <div class="node-bank-content">
+            <section aria-labelledby="node-bank-input-title"><h2 id="node-bank-input-title">Входи</h2><div id="node-bank-input" class="node-bank-list"></div></section>
+            <section aria-labelledby="node-bank-output-title"><h2 id="node-bank-output-title">Виходи</h2><div id="node-bank-output" class="node-bank-list"></div></section>
+          </div>
+        </details>
+        <p id="graph-runtime" class="muted small-text" role="status" hidden></p>
+        <details class="graph-diagnostics" id="graph-diagnostics" hidden>
+          <summary>Діагностика графа <span id="graph-diagnostics-count"></span></summary>
+          <ul id="graph-diagnostics-items"></ul>
+          <button type="button" class="button subtle" id="graph-reload">Оновити граф</button>
+        </details>
+      </div>
       <div class="sidebar-bottom"><span class="status-dot"></span>Контроль доступу<span class="sidebar-note">IP Media Tool</span></div>
     </aside>
     <div class="main-column">
@@ -45,28 +60,22 @@
         <div class="account-area"><span id="account-avatar" class="avatar small">…</span><div><strong id="account-name">Завантаження…</strong><span id="account-role" class="account-role"></span></div><button id="own-password-button" type="button" class="button text-button">Пароль</button><button id="logout-button" type="button" class="button subtle">Вийти</button></div>
       </header>
       <main class="main-content" id="main-content" aria-busy="true">
-        <section id="workspace-view">
-          <div class="page-heading"><h1>Робочий простір</h1></div>
+        <section id="workspace-view" aria-label="Робочий простір">
           <div class="node-graph" id="node-graph">
-            <div class="graph-toolbar">
-              <button type="button" class="button primary" id="graph-add" hidden>＋ Додати ноду</button>
-              <button type="button" class="button subtle" id="graph-reload">Оновити</button>
-              <button type="button" class="button subtle" id="graph-cancel-edge" hidden>Скасувати з’єднання</button>
-              <span id="graph-runtime" class="muted small-text" role="status"></span>
-            </div>
-            <p id="graph-notice" class="graph-notice small-text" role="status" hidden></p>
-            <p id="graph-error" class="graph-notice form-error" role="alert" hidden></p>
             <div class="graph-viewport" id="graph-viewport" tabindex="0" aria-label="Граф нод">
-              <div class="graph-plane" id="graph-plane">
-                <svg class="graph-edges" id="graph-edges" aria-hidden="true"></svg>
-                <div id="graph-nodes"></div>
-                <p id="graph-empty" class="graph-empty muted">Завантаження графа…</p>
+              <div class="graph-stage" id="graph-stage">
+                <div class="graph-plane" id="graph-plane">
+                  <svg class="graph-edges" id="graph-edges" aria-hidden="true"></svg>
+                  <div id="graph-nodes"></div>
+                </div>
               </div>
             </div>
-            <details class="graph-diagnostics" id="graph-diagnostics" hidden>
-              <summary>Діагностика графа <span id="graph-diagnostics-count"></span></summary>
-              <ul id="graph-diagnostics-items"></ul>
-            </details>
+            <div class="graph-zoom" role="group" aria-label="Масштаб графа">
+              <button type="button" id="graph-zoom-out" aria-label="Зменшити масштаб" title="Зменшити масштаб">−</button>
+              <button type="button" id="graph-zoom-reset" aria-label="Скинути масштаб до 100%" title="Скинути масштаб до 100%">100%</button>
+              <button type="button" id="graph-zoom-in" aria-label="Збільшити масштаб" title="Збільшити масштаб">+</button>
+              <button type="button" id="graph-zoom-fit" aria-label="Вмістити всі ноди" title="Вмістити всі ноди">⛶</button>
+            </div>
           </div>
         </section>
         <section id="users-view" hidden>
@@ -105,7 +114,7 @@
         <p class="field-help" id="graph-settings-help">Використовуй поля зі схеми модуля. Паролі й токени сюди не вводь.</p>
       </div>
       <p class="form-error" id="graph-form-error" role="alert" hidden></p>
-      <div class="dialog-actions"><button type="button" class="button subtle" id="graph-dialog-close">Закрити</button><button type="submit" class="button primary" id="graph-save">Зберегти</button></div>
+      <div class="dialog-actions"><button type="button" class="button danger" id="graph-node-delete" hidden>Видалити</button><button type="button" class="button subtle" id="graph-dialog-close">Закрити</button><button type="submit" class="button primary" id="graph-save">Зберегти</button></div>
     </form>
   </dialog>
   <dialog id="user-dialog"><form id="user-form"><div class="dialog-heading"><div><span class="eyebrow">ОБЛІКОВИЙ ЗАПИС</span><h2 id="user-dialog-title">Новий користувач</h2></div><button class="icon-button" type="button" data-close aria-label="Закрити">×</button></div><label for="user-name">Ім’я</label><input id="user-name" name="display_name" maxlength="80" required><label for="user-login">Логін</label><input id="user-login" name="username" minlength="3" maxlength="32" pattern="[a-z0-9][a-z0-9_.\-]{2,31}" autocomplete="off" required><label for="user-role">Роль</label><select id="user-role" name="role"><option value="viewer">Перегляд</option><option value="operator">Оператор</option><option value="admin">Адміністратор</option></select><div id="new-password-group"><label for="user-password">Початковий пароль</label><input id="user-password" name="password" type="password" minlength="12" maxlength="128" autocomplete="new-password"><p class="field-help">Від 12 до 128 символів.</p></div><label class="checkbox-label" id="user-enabled-group"><input type="checkbox" id="user-enabled" name="enabled">Обліковий запис активний</label><p class="form-error" data-error role="alert" hidden></p><div class="dialog-actions"><button class="button subtle" type="button" data-close>Скасувати</button><button class="button primary" type="submit">Зберегти</button></div></form></dialog>

@@ -1,4 +1,15 @@
-import { appendField, selectField, settingsController } from "/assets/node-fields.js";
+import { appendField, deckLinkCardControls, selectField, settingsController } from "/assets/node-fields.js";
+
+/** Mount the operator's frequently used SDI capture controls on the graph card. */
+export function mountCard(container, { config, saveSettings }) {
+  const fields = document.createElement("div");
+  fields.className = "node-sdi-input__card";
+  container.append(fields);
+  const channels = appendField(fields, "PCM канали",
+    selectField([["2", "2"], ["8", "8"], ["16", "16"]], String(config.settings.audio_channels)), { readOnly: true });
+  return deckLinkCardControls(container, fields, { config, direction: "input", saveSettings,
+    controls: [{ input: channels, key: "audio_channels", parse: Number }] });
+}
 
 /** Build one SDI capture form and return its settings collector. */
 export function mount(container, { readOnly }) {

@@ -130,6 +130,10 @@ class Supervisor:
                 summary = self.snapshot(key)
                 status = summary.pop("status")
                 summary.update({name: status[name] for name in ("instance_id", "config_revision", "status_revision", "updated_at", "error")})
+                for field in ("video_caps", "audio_caps"):
+                    caps = status["metrics"].get(field)
+                    if isinstance(caps, str):
+                        summary[field] = caps[:256]
                 if summary["error"] is not None:
                     summary["error_message_truncated"] = len(summary["error"]["message"]) > 256
                     summary["error"] = {**summary["error"], "message": summary["error"]["message"][:256]}
