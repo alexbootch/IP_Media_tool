@@ -6,18 +6,6 @@ const STATUS = {
 };
 const SVG_NS = "http://www.w3.org/2000/svg";
 const LIMIT = 100000;
-const LOG_EVENTS = {
-  "node.config_created": "Ноду створено",
-  "node.config_updated": "Конфігурацію збережено",
-  "worker.start_requested": "Запит запуску",
-  "worker.start_failed": "Запуск відхилено",
-  "worker.spawned": "Процес створено",
-  "worker.exited": "Процес завершено",
-  "worker.recovery_scheduled": "Заплановано повторний запуск",
-  "worker.recovery_failed": "Повторний запуск відхилено",
-  "worker.stop_requested": "Запит зупинки",
-  "worker.channel_failed": "Помилка обміну з воркером",
-};
 
 /** Make a plain element, keeping server content out of HTML and CSS strings. */
 function element(tag, label = "", className = "") {
@@ -328,16 +316,6 @@ export function initializeGraph({ request, role }) {
     void loadNodeLog();
   }
 
-  /** Format one bounded runtime event without injecting HTML. */
-  function logLine(event) {
-    const when = new Date(event.at).toLocaleString("uk-UA");
-    const state = event.event_code.startsWith("worker.state.") ? event.event_code.slice("worker.state.".length) : "";
-    const label = STATUS[state] ?? LOG_EVENTS[event.event_code] ?? event.event_code;
-    const error = event.error_code ? ` [${[event.error_code, event.stage].filter(Boolean).join(" · ")}] ${event.message}` : "";
-    const exit = event.event_code === "worker.exited" && event.exit_code !== null ? ` (код ${event.exit_code})` : "";
-    return `${when}  ${label}${exit}${error}`;
-  }
-
   /** Refresh only the open journal and keep the last output if a request fails. */
   async function loadNodeLog() {
     const view = logView;
@@ -345,9 +323,9 @@ export function initializeGraph({ request, role }) {
     view.loading = true;
     ui.logRefresh.disabled = true;
     try {
-      const { events } = await request(`/api/nodes/${view.id}/logs`, { signal: AbortSignal.timeout(7000) });
+      const { lines } = await request(`/api/nodes/${view.id}/logs`, { signal: AbortSignal.timeout(7000) });
       if (logView !== view || !ui.logDialog.open) return;
-      const text = [...events].reverse().map(logLine).join("\n");
+      const text = [...lines].reverse().join("\n");
       const next = text || "У журналі ще немає подій.";
       if (ui.logLines.textContent !== next) ui.logLines.textContent = next;
       showError(ui.logError);

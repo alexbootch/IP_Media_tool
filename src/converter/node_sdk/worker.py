@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 import asyncio
 import copy
 from datetime import datetime, timezone
-import json
 import logging
 from types import MappingProxyType
 from uuid import uuid4
@@ -37,9 +36,9 @@ class WorkerDiagnostic(ConfigError):
 class NodeLogger:
     """Log event codes and session identity without arbitrary settings or secret values."""
 
-    def __init__(self, node_id, node_type, instance_id):
-        """Bind stable audit fields to one worker process."""
-        self.fields = {"node_id": node_id, "node_type": node_type, "instance_id": instance_id}
+    def __init__(self, node_id, node_type):
+        """Bind the node identity for messages in the shared runtime log."""
+        self.node_id, self.node_type = node_id, node_type
         self.logger = logging.getLogger("ip-media-tool.worker")
 
     def event(self, event_code, level=logging.INFO):
@@ -48,7 +47,7 @@ class NodeLogger:
 
         if not isinstance(event_code, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{0,100}", event_code):
             raise ValueError("A bounded event code is required")
-        self.logger.log(level, json.dumps({**self.fields, "event_code": event_code}))
+        self.logger.log(level, "[%s %s] %s", self.node_type, self.node_id, event_code)
 
 
 class WorkerContext:
@@ -60,7 +59,7 @@ class WorkerContext:
         self.node_id, self.instance_id = config["id"], instance_id
         self.leases = tuple(MappingProxyType(copy.deepcopy(lease)) for lease in leases)
         self.cancelled = asyncio.Event()
-        self.logger = NodeLogger(self.node_id, config["type"], instance_id)
+        self.logger = NodeLogger(self.node_id, config["type"])
         self.writer, self.schemas = writer, schemas
         self._write_lock = asyncio.Lock()
         self.media_root = None
@@ -100,8 +99,6 @@ class WorkerContext:
                 raise ConfigError("invalid_status", "Worker status exceeds 48 KiB.")
             await write_frame(self.writer, envelope(self.node_id, self.instance_id, "status", status))
             self._status = status
-            if state != previous:
-                self.logger.event("worker.state." + state)
 
     async def set_state(self, state, error=None):
         """Convenience method shared by all node types; preserve current metrics."""

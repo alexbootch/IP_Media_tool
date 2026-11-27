@@ -16,7 +16,7 @@ Runtime закріплює Python imports і working directory за реальн
 
 Context надає detached config/status snapshots, node_id/instance_id, immutable lease descriptors, cancellation Event, logger.event(event_code), publish_status(status), set_state(state, error=None). Status identity/config revision незмінні. SDK сам збільшує status_revision, задає updated_at та перевіряє схему й переходи станів. Heartbeat не повинен бути сигналом апаратної готовності.
 
-Події lifecycle містять node ID, тип, instance ID, revision, код виходу й кількість спроб. SDK logger приймає коди подій. Журнал сервісу — `/opt/ip-media-tool/logs/runtime.log`. Журнал конкретної ноди — `/opt/ip-media-tool/logs/nodes/<назва>--<UUID>.log`. [Перелік журналів](INSTALL_UPDATE.uk.md#журнали)
+SDK і runtime використовують стандартний Python `logging`. Журнал сервісу — `/opt/ip-media-tool/logs/runtime.log`. Журнал конкретної ноди — `/opt/ip-media-tool/logs/nodes/<назва>--<UUID>.log`. Він містить текстові події з причиною збою, кодом виходу або номером спроби, де це доречно. `instance_id` використовується в IPC для ідентифікації конкретного запуску воркера. [Перелік журналів](INSTALL_UPDATE.uk.md#журнали)
 
 ## IPC
 

@@ -245,7 +245,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--ipc-fd", required=True, type=int)
     arguments = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
     return asyncio.run(run(arguments.ipc_fd))
 
 

@@ -4,7 +4,6 @@ import asyncio
 from collections import OrderedDict, deque
 import copy
 from dataclasses import dataclass, field
-import json
 import logging
 import os
 from pathlib import Path
@@ -20,7 +19,7 @@ from converter.config.validation import ConfigError, canonical_id, decode_json
 from converter.node_sdk.worker import TRANSITIONS, utc_now
 from converter.node_sdk.media import validate_contract
 from converter.runtime.diagnostics import exception_details
-from converter.runtime.node_logs import NodeLogs
+from converter.runtime.node_logs import FORMATTER, NodeLogs, node_log_record, preview_line
 from converter.runtime.protocol import MAX_STATUS, encode_frame, envelope, read_frame, write_frame
 
 
@@ -100,24 +99,24 @@ class Supervisor:
     def _log(self, entry, event_code, *, error=None):
         """Retain bounded lifecycle events and mirror them to the system journal."""
         node_id = entry.config["id"]
-        event = {"at": utc_now(), "event_code": event_code, "node_id": node_id,
-                 "node_type": entry.config["type"], "instance_id": entry.instance_id or None,
-                 "config_revision": entry.config["revision"], "restart_count": entry.restart_count,
+        event = {"at": utc_now(), "event_code": event_code, "restart_count": entry.restart_count,
                  "exit_code": entry.last_exit_code}
         if error is not None:
             message = error["message"].encode("utf-8")[:240].decode("utf-8", errors="ignore")
             event.update(error_code=error["code"], message=message)
             if error.get("stage"):
                 event["stage"] = error["stage"]
+        record = node_log_record(event)
         history = self.events.setdefault(node_id, deque(maxlen=LOG_EVENT_LIMIT))
-        history.append(event)
+        history.append(preview_line(FORMATTER.format(record)))
         self.events.move_to_end(node_id)
         if len(self.events) > LOG_NODE_LIMIT:
             self.events.popitem(last=False)
-        journal_event = {**event, **error["details"]} if error and "details" in error else event
-        LOGGER.log(logging.WARNING if error else logging.INFO, json.dumps(journal_event, ensure_ascii=False))
+        LOGGER.log(record.levelno, "[%s %s] %s", entry.config["type"], node_id, record.getMessage())
+        if error and error.get("details", {}).get("frames"):
+            LOGGER.error("[%s] %s", node_id, " → ".join(error["details"]["frames"]))
         if self.node_logs is not None:
-            self.node_logs.write(entry.config, journal_event)
+            self.node_logs.write(entry.config, record)
 
     async def dispatch(self, operation, arguments):
         """Serialize lifecycle and writes so config edits cannot race a start."""
@@ -146,9 +145,8 @@ class Supervisor:
                     persisted = self.node_logs.read(node_id, LOG_EVENT_LIMIT)
                 except OSError:
                     LOGGER.warning("node.log_read_failed node_id=%s", node_id)
-            events = {(event["at"], event["event_code"]): event for event in persisted}
-            events.update({(event["at"], event["event_code"]): event for event in self.events.get(node_id, ())})
-            return {"events": sorted(events.values(), key=lambda event: event["at"])[-LOG_EVENT_LIMIT:]}
+            lines = dict.fromkeys([*persisted, *self.events.get(node_id, ())])
+            return {"lines": sorted(lines, key=lambda line: line[:23])[-LOG_EVENT_LIMIT:]}
         config_argument = arguments.get("config")
         node_id = canonical_id(config_argument.get("id") if operation == "save_config" and isinstance(config_argument, dict) else arguments.get("node_id"))
         if operation == "stop":

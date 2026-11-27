@@ -2,7 +2,6 @@
 
 import asyncio
 import fcntl
-import json
 import logging
 import os
 from pathlib import Path
@@ -69,11 +68,13 @@ class RuntimeServer:
                                operation, node_id, request_id, phase, error.code)
             await self._error(writer, request_id, error)
         except Exception as error:
-            LOGGER.error(json.dumps({
-                "event_code": "runtime.command_failed", "operation": operation, "node_id": node_id,
-                "request_id": request_id, "phase": phase, **exception_details(error),
-            }, ensure_ascii=False))
-            message = f"Runtime operation failed. Check the system journal for request {request_id}."
+            details = exception_details(error)
+            errno = f"{details['reason']} (errno {details['errno']})" if "errno" in details else ""
+            reason = " · ".join(filter(None, (details["exception"], errno, details.get("file"))))
+            locations = " → ".join(details["frames"])
+            LOGGER.error("runtime.command_failed operation=%s node_id=%s request_id=%s phase=%s — %s%s",
+                         operation, node_id, request_id, phase, reason, f" — {locations}" if locations else "")
+            message = f"Runtime operation failed. Check runtime.log for request {request_id}."
             await self._error(writer, request_id, ConfigError("runtime_unavailable", message, 503))
         finally:
             self.handlers.discard(task)
@@ -155,7 +156,7 @@ async def serve():
 
 def main():
     """Run only when explicitly started by systemd/operator, with no config autostart."""
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
     asyncio.run(serve())
 
 
